@@ -11,7 +11,13 @@ using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Infrastructure;
 using Xat.Orchestrator.Infrastructure.Definitions;
 
-var builder = WebApplication.CreateBuilder(args);
+// The content root is the folder of the program, not the current folder.
+// So the program finds appsettings.json, the pipeline files and the prompt templates from any folder.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
 // The orchestrator has no authentication. Refuse to start on a network address.
 // The "urls" setting holds the addresses from --urls, ASPNETCORE_URLS, DOTNET_URLS and appsettings.json.

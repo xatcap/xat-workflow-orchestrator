@@ -10,15 +10,14 @@ on:
 permissions:
   contents: read
 
+env:
+  TAG: ${{ github.ref_name }}
+
 jobs:
-  release:
+  # A release builds only from a commit that passes every test.
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # The job needs write access to create the GitHub release.
-    permissions:
-      contents: write
-    env:
-      TAG: ${{ github.ref_name }}
     steps:
       # The token is not stored in the local git configuration.
       - name: Check out the code
@@ -40,27 +39,128 @@ jobs:
       - name: Test
         run: dotnet test XatOrchestrator.slnx --configuration Release --no-build
 
-      # The publish output includes the pipeline files and the prompt templates.
+  # The release stays a draft until every archive is uploaded, so nobody can download a partial release.
+  # If a later job fails, use "Re-run failed jobs". A full re-run needs the draft release to be deleted first.
+  draft:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$TAG" --draft --title "$TAG" --generate-notes --verify-tag
+
+  # Each platform builds its own archive. The archive holds one program that needs no .NET installation.
+  package:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, rid: osx-arm64, extension: tar.gz, exe: '' }
+          - { os: ubuntu-24.04, rid: linux-x64, extension: tar.gz, exe: '' }
+          - { os: windows-2025, rid: win-x64, extension: zip, exe: '.exe' }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # The job needs write access to upload the archive to the release.
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The publish output includes the pipeline files and the prompt templates, next to the program.
       - name: Publish the API
         run: >
           dotnet publish src/Xat.Orchestrator.Api/Xat.Orchestrator.Api.csproj
           --configuration Release
-          --no-restore
-          --output artifacts/publish
+          --runtime "${{ matrix.rid }}"
+          --self-contained
+          --output "artifacts/publish/xat-orchestrator-${TAG}-${{ matrix.rid }}"
+          -p:PublishSingleFile=true
+          -p:DebugType=none
           -p:Version="${TAG#v}"
 
       - name: Create the archive
         run: |
+          name="xat-orchestrator-${TAG}-${{ matrix.rid }}"
+          # The archive does not need the documentation files of the build.
+          rm -f artifacts/publish/"$name"/*.xml
           mkdir -p artifacts/release
-          (cd artifacts/publish && zip -r "../release/xat-orchestrator-${TAG}.zip" .)
+          if [ "${{ matrix.extension }}" = "zip" ]; then
+            (cd artifacts/publish && 7z a -tzip "../release/$name.zip" "$name")
+          else
+            # The tar format keeps the permission to run the program.
+            # COPYFILE_DISABLE stops the macOS tar from adding ._ files to the archive.
+            COPYFILE_DISABLE=1 tar -czf "artifacts/release/$name.tar.gz" -C artifacts/publish "$name"
+          fi
 
-      # Only this step receives the token. The archive goes to the release, not to the run.
-      - name: Create the GitHub release
+      # The test unpacks the real archive and starts the program from its own folder.
+      - name: Start the program from the archive
+        run: |
+          name="xat-orchestrator-${TAG}-${{ matrix.rid }}"
+          rm -rf smoke && mkdir smoke
+          if [ "${{ matrix.extension }}" = "zip" ]; then
+            7z x "artifacts/release/$name.zip" -osmoke > /dev/null
+          else
+            tar -xzf "artifacts/release/$name.tar.gz" -C smoke
+          fi
+          # The test starts the program from another folder. The program must find its files by itself.
+          cd smoke
+          "./$name/Xat.Orchestrator.Api${{ matrix.exe }}" > smoke.log 2>&1 &
+          pid=$!
+          ok=false
+          for _ in $(seq 1 30); do
+            if curl -fs -o /dev/null http://127.0.0.1:8430/health/ready; then ok=true; break; fi
+            sleep 1
+          done
+          if [ "$ok" = true ]; then
+            # The body goes to a variable first. A pipe with grep -q can fail with SIGPIPE under pipefail.
+            body=$(curl -fs http://127.0.0.1:8430/v1/pipelines) || ok=false
+            grep -q '"name":"rag-qa"' <<< "$body" || ok=false
+          fi
+          kill "$pid" || true
+          if [ "$ok" != true ]; then
+            echo "The program did not start, or it did not list the pipelines." >&2
+            cat smoke.log >&2
+            exit 1
+          fi
+
+      # In this job, only this step receives the token. The archive goes to the release, not to the run.
+      - name: Upload the archive to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$TAG"
-          "artifacts/release/xat-orchestrator-${TAG}.zip"
-          --title "$TAG"
-          --generate-notes
-          --verify-tag
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" --clobber artifacts/release/xat-orchestrator-*.${{ matrix.extension }}
+
+  # This job adds the checksums and publishes the release.
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Write the checksums and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download "$TAG" --pattern 'xat-orchestrator-*' --dir release
+          (cd release && sha256sum xat-orchestrator-* > SHA256SUMS.txt)
+          gh release upload "$TAG" --clobber release/SHA256SUMS.txt
+          gh release edit "$TAG" --draft=false

@@ -1,12 +1,12 @@
 # Quickstart
 
-This page shows how to build, test and start xat-workflow-orchestrator. It also shows the first calls and how to extend the orchestrator. The routes and the settings are in the [API reference](api.md). The design is in the [architecture](architecture.md).
+This page shows how to run a release, or how to build, test and start xat-workflow-orchestrator. It also shows the first calls and how to extend the orchestrator. The routes and the settings are in the [API reference](api.md). The design is in the [architecture](architecture.md).
 
 The commands run in a POSIX shell. Run them from the root of the repository, unless a step says otherwise.
 
 ## Prerequisites
 
-- The .NET SDK 10.0.401. The file `global.json` pins this version and disables roll-forward. Check the version with `dotnet --version`. The output must be `10.0.401`.
+- To build from source, install the .NET SDK 10.0.401. The file `global.json` pins this version and disables roll-forward. Check the version with `dotnet --version`. The output must be `10.0.401`. A release does not need the .NET SDK.
 - xat-rag and xat-llm-engine, each running on a loopback address. Read the documentation of each service to start it.
 - Python 3, for the example receiver in [Run in the background](#run-in-the-background) and for the example in [Call the route with the OpenAI Python library](#call-the-route-with-the-openai-python-library).
 
@@ -16,6 +16,60 @@ If the SDK is installed in `~/.dotnet`, add it to the path before you run `dotne
 export PATH="$HOME/.dotnet:$PATH"
 export DOTNET_ROOT="$HOME/.dotnet"
 ```
+
+## Run a release
+
+Each release has one archive for each platform. The archive holds the program, the pipeline files and the prompt templates. The archive needs no .NET installation. Download the archive for your platform from the Releases page of the GitHub repository:
+
+- `xat-orchestrator-vX.Y.Z-osx-arm64.tar.gz` for macOS on Apple silicon.
+- `xat-orchestrator-vX.Y.Z-linux-x64.tar.gz` for Linux on x64.
+- `xat-orchestrator-vX.Y.Z-win-x64.zip` for Windows on x64.
+
+1. Download the archive. Download the file `SHA256SUMS.txt` from the same release, too.
+
+    Optional: check the archive. Run `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the folder that holds both files.
+
+2. Unpack the archive. The archive creates a folder with the same name as the archive, without the extension. On macOS and Linux, run:
+
+    ```bash
+    tar -xzf xat-orchestrator-vX.Y.Z-osx-arm64.tar.gz
+    ```
+
+   On Windows, extract the zip file. Windows Explorer can do this.
+
+3. On macOS only, remove the quarantine attribute from the folder. The program is not signed, so macOS blocks it until you run:
+
+    ```bash
+    xattr -dr com.apple.quarantine xat-orchestrator-vX.Y.Z-osx-arm64
+    ```
+
+4. Start the program:
+
+    ```bash
+    cd xat-orchestrator-vX.Y.Z-osx-arm64
+    ./Xat.Orchestrator.Api
+    ```
+
+   On Windows, run `Xat.Orchestrator.Api.exe`. The program reads `appsettings.json`, `pipelines/` and `prompts/` from its own folder. You can start it from any current folder.
+
+   The output shows the listen address when the start succeeds:
+
+    ```text
+    Now listening on: http://127.0.0.1:8430
+    Application started. Press Ctrl+C to shut down.
+    ```
+
+5. Pass options on the command line, if a setting must change. The options override the settings in `appsettings.json`. This example sets the addresses of the upstream services:
+
+    ```bash
+    ./Xat.Orchestrator.Api \
+      --Upstreams:XatRag:BaseUrl=http://127.0.0.1:8421 \
+      --Upstreams:XatLlmEngine:BaseUrl=http://127.0.0.1:8420
+    ```
+
+   On Windows, add the same options after `Xat.Orchestrator.Api.exe`, on one line.
+
+To stop the program, press Ctrl+C. The steps in [First calls](#first-calls) work the same way for a release.
 
 ## Build
 
