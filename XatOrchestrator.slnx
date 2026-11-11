@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Xat.Orchestrator.Api/Xat.Orchestrator.Api.csproj" />
+    <Project Path="src/Xat.Orchestrator.Application/Xat.Orchestrator.Application.csproj" />
+    <Project Path="src/Xat.Orchestrator.Domain/Xat.Orchestrator.Domain.csproj" />
+    <Project Path="src/Xat.Orchestrator.Infrastructure/Xat.Orchestrator.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Xat.Orchestrator.Application.Tests/Xat.Orchestrator.Application.Tests.csproj" />
+    <Project Path="tests/Xat.Orchestrator.Infrastructure.Tests/Xat.Orchestrator.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Xat.Orchestrator.Api.Tests/Xat.Orchestrator.Api.Tests.csproj" />
+    <Project Path="tests/Xat.Orchestrator.Architecture.Tests/Xat.Orchestrator.Architecture.Tests.csproj" />
+    <Project Path="tests/Xat.Orchestrator.Domain.Tests/Xat.Orchestrator.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

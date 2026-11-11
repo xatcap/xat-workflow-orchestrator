@@ -1,0 +1,56 @@
+# Asks three RAGs one after the other, then merges the chunks.
+# Each retrieve step uses a profile that points to a xat-rag context with one RAG.
+name: rag-sequential
+version: 1
+summary: Asks the docs, JIRA and diff RAGs in turn and answers from the merged chunks.
+stream: allowed
+input:
+  type: object
+  required: [prompt]
+  additionalProperties: false
+  properties:
+    prompt:
+      type: string
+      minLength: 1
+      maxLength: 20000
+steps:
+  - id: system
+    uses: prompt.system
+    with:
+      text: Answer the question with the sources. If the sources do not answer the question, say so.
+  - id: user
+    uses: prompt.user
+    with:
+      text: "${input.prompt}"
+  - id: docs
+    uses: rag.retrieve
+    with:
+      profile: docs
+  - id: jira
+    uses: rag.retrieve
+    with:
+      profile: jira
+  - id: diffs
+    uses: rag.retrieve
+    with:
+      profile: diffs
+  - id: merged
+    uses: retrieval.merge
+    with:
+      from: [docs, jira, diffs]
+      dedupe: true
+      maxChunks: 12
+  - id: no-sources
+    uses: flow.complete-if
+    with:
+      key: steps.merged.chunks
+      isEmpty: true
+      text: The sources hold no information for this question.
+  - id: assemble
+    uses: prompt.assemble
+  - id: generate
+    uses: llm.generate
+    with:
+      temperature: 0.2
+  - id: citations
+    uses: answer.verify-citations

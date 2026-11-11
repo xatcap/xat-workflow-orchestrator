@@ -1,0 +1,54 @@
+using Microsoft.Extensions.DependencyInjection;
+using Xat.Orchestrator.Application.Definitions;
+using Xat.Orchestrator.Application.Engine;
+using Xat.Orchestrator.Application.Jobs;
+using Xat.Orchestrator.Application.Steps;
+
+namespace Xat.Orchestrator.Application;
+
+/// <summary>Registers the services of the Application layer.</summary>
+public static class DependencyInjection
+{
+    /// <summary>Adds the pipeline engine and the built-in steps to the service collection.</summary>
+    /// <param name="services">The service collection of the host.</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    public static IServiceCollection AddApplication(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<RunnerOptions>();
+        services.AddOptions<JobsOptions>();
+        services.AddSingleton<AsyncRunService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IStepRegistry, StepRegistry>();
+        services.AddSingleton<PipelineRunner>();
+        services.AddSingleton<PipelineDefinitionValidator>();
+        services.AddStepMiddleware<StepActivityMiddleware>();
+
+        services
+            .AddPipelineStep<PromptSystemStep, PromptSystemOptions>(
+                "prompt.system", StepTraits.None, "Sets the system prompt from a text or a template.")
+            .AddPipelineStep<PromptUserStep, PromptUserOptions>(
+                "prompt.user", StepTraits.None, "Sets the prompt of the caller.")
+            .AddPipelineStep<PromptContextStep, PromptContextOptions>(
+                "prompt.context", StepTraits.None, "Adds context text that the caller sent, in an escaped tag.")
+            .AddPipelineStep<PromptAppendStep, PromptAppendOptions>(
+                "prompt.append", StepTraits.None, "Adds an instruction that the pipeline author wrote.")
+            .AddPipelineStep<RetrieveStep, RetrieveOptions>(
+                "rag.retrieve", StepTraits.Idempotent, "Gets the chunks of one xat-rag context for a question.")
+            .AddPipelineStep<RetrievalMergeStep, RetrievalMergeOptions>(
+                "retrieval.merge", StepTraits.Idempotent, "Merges the chunks of several retrieval steps.")
+            .AddPipelineStep<FlowCompleteIfStep, FlowCompleteIfOptions>(
+                "flow.complete-if", StepTraits.ProducesAnswer, "Ends the run with a fixed answer when a condition is true.")
+            .AddPipelineStep<PromptAssembleStep, PromptAssembleOptions>(
+                "prompt.assemble", StepTraits.None, "Builds the chat messages and fits them into the token budget.")
+            .AddPipelineStep<LlmGenerateStep, LlmGenerateOptions>(
+                "llm.generate",
+                StepTraits.CallsLlm | StepTraits.Streams | StepTraits.ProducesAnswer,
+                "Sends the messages to the LLM and stores the answer.")
+            .AddPipelineStep<VerifyCitationsStep, VerifyCitationsOptions>(
+                "answer.verify-citations", StepTraits.None, "Maps the citations in the answer to the sources.");
+
+        return services;
+    }
+}

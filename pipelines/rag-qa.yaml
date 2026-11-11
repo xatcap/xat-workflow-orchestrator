@@ -1,0 +1,52 @@
+# Answers a question from one xat-rag context and cites the sources.
+name: rag-qa
+version: 1
+summary: Answers a question from a xat-rag context and cites the sources.
+stream: allowed
+input:
+  type: object
+  required: [prompt]
+  additionalProperties: false
+  properties:
+    prompt:
+      type: string
+      minLength: 1
+      maxLength: 20000
+      description: The question of the caller.
+    context:
+      type: string
+      maxLength: 64
+      description: The alias of the retrieval profile. The default is "default".
+    system_prompt:
+      type: string
+      maxLength: 20000
+      description: A system prompt that replaces the default one.
+steps:
+  - id: system
+    uses: prompt.system
+    with:
+      text: "${input.system_prompt ?? 'Answer the question with the sources. If the sources do not answer the question, say so.'}"
+  - id: user
+    uses: prompt.user
+    with:
+      text: "${input.prompt}"
+  - id: retrieve
+    uses: rag.retrieve
+    with:
+      profile: "${input.context ?? 'default'}"
+  - id: no-sources
+    uses: flow.complete-if
+    with:
+      key: steps.retrieve.chunks
+      isEmpty: true
+      text: The sources hold no information for this question.
+  - id: assemble
+    uses: prompt.assemble
+    with:
+      reserveOutput: 800
+  - id: generate
+    uses: llm.generate
+    with:
+      temperature: 0.2
+  - id: citations
+    uses: answer.verify-citations

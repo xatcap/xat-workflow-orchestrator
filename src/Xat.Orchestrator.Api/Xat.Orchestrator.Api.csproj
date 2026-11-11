@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Xat.Orchestrator.Application\Xat.Orchestrator.Application.csproj" />
+    <ProjectReference Include="..\Xat.Orchestrator.Infrastructure\Xat.Orchestrator.Infrastructure.csproj" />
+    <PackageReference Include="Yarp.ReverseProxy" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The pipeline files and the prompt templates sit at the root of the repository. They go to the output folder. -->
+    <Content Include="..\..\pipelines\**\*.yaml" Link="pipelines\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\prompts\**\*.liquid" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xat.Orchestrator.Api.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xat.Orchestrator.Api\Xat.Orchestrator.Api.csproj" />
+    <PackageReference Include="NetArchTest.Rules" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

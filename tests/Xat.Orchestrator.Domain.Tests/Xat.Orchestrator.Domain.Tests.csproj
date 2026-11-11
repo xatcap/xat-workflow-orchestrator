@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xat.Orchestrator.Domain\Xat.Orchestrator.Domain.csproj" />
+  </ItemGroup>
+</Project>

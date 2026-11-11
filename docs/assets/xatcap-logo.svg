@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="xatcap logo: a wide-brimmed straw sun hat with a ribbon bow">
+  <defs>
+    <clipPath id="disc"><circle cx="128" cy="128" r="124"/></clipPath>
+    <!-- straw weave: crosshatch in the outline colour -->
+    <pattern id="straw" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <path d="M0 0 H9 M0 4.5 H9" stroke="#FFFFFF" stroke-width="1.4" opacity="0.55"/>
+      <path d="M0 0 V9" stroke="#FFFFFF" stroke-width="1" opacity="0.35"/>
+    </pattern>
+  </defs>
+  <g clip-path="url(#disc)" transform="translate(0 -6)">
+    <!-- brim -->
+    <path d="M6 160 Q20 130 66 136 Q128 126 190 136 Q236 130 250 160 Q232 196 128 194 Q24 196 6 160 Z" fill="#000000"/>
+    <path d="M6 160 Q20 130 66 136 Q128 126 190 136 Q236 130 250 160 Q232 196 128 194 Q24 196 6 160 Z" fill="url(#straw)"/>
+    <path d="M6 160 Q20 130 66 136 Q128 126 190 136 Q236 130 250 160 Q232 196 128 194 Q24 196 6 160 Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M34 164 Q128 190 222 164 M62 166 Q128 180 194 166" fill="none" stroke="#FFFFFF" stroke-width="2.5" opacity="0.8"/>
+    <!-- crown -->
+    <path d="M78 150 C78 98 102 74 128 74 C154 74 178 98 178 150 Q128 162 78 150 Z" fill="#000000"/>
+    <path d="M78 150 C78 98 102 74 128 74 C154 74 178 98 178 150 Q128 162 78 150 Z" fill="url(#straw)"/>
+    <path d="M78 150 C78 98 102 74 128 74 C154 74 178 98 178 150 Q128 162 78 150 Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+    <!-- ribbon band -->
+    <path d="M79 126 Q128 140 177 126 L178 148 Q128 162 78 148 Z" fill="#FFFFFF"/>
+    <!-- bow with two tails -->
+    <g fill="#FFFFFF" stroke="#000000" stroke-width="3" stroke-linejoin="round">
+      <path d="M96 140 Q86 170 66 204 L80 206 Q96 176 102 144 Z"/>
+      <path d="M100 142 Q104 174 98 210 L110 208 Q114 174 106 144 Z"/>
+      <path d="M98 140 C74 118 62 146 78 154 Z"/>
+      <path d="M98 140 C120 120 130 150 112 156 Z"/>
+      <circle cx="98" cy="142" r="7.5"/>
+    </g>
+  </g>
+</svg>

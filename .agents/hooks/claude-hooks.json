@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PreToolUse": [
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && python3 \"${CLAUDE_PLUGIN_ROOT:-.}/.agents/scripts/polyglot-lint.py\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
+

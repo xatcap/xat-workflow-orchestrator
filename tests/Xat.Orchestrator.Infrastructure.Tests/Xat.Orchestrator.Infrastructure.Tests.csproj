@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Xat.Orchestrator.Infrastructure\Xat.Orchestrator.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Xat.Orchestrator.Application\Xat.Orchestrator.Application.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <!-- WireMock.Net brings Microsoft.AspNetCore.WebUtilities 2.3.0, which has a known advisory (CVE-2026-118750). This pin raises it to the patched version. -->
+    <PackageReference Include="Microsoft.AspNetCore.WebUtilities" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="WireMock.Net" />
+  </ItemGroup>
+</Project>

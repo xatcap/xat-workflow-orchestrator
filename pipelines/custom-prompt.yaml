@@ -1,0 +1,70 @@
+# The seven-step flow, plus a citation check at the end:
+#   1. Set the system prompt (from the API call).
+#   2. Set the prompt of the caller.
+#   3. Set the context of the caller.
+#   4. Retrieve from the RAG.
+#   5. Add an extra prompt.
+#   6. Structure all data into chat messages.
+#   7. Send to the LLM and return the answer.
+#   8. Check the citations in the answer (this step only adds notes and links).
+#
+# The system prompt and the prompt come from the program that calls the API. That program is the authority for them,
+# so the orchestrator does not escape them. If that program forwards text of its own end users into these two fields,
+# the end users can change the instructions. Filter such text in that program.
+name: custom-prompt
+version: 1
+summary: Builds the prompt from a system prompt, a prompt, caller context and retrieved chunks.
+stream: allowed
+input:
+  type: object
+  required: [prompt]
+  additionalProperties: false
+  properties:
+    system_prompt:
+      type: string
+      maxLength: 20000
+    prompt:
+      type: string
+      minLength: 1
+      maxLength: 20000
+    context:
+      type: string
+      maxLength: 50000
+      description: Text that the caller sends as context. Do not mix it up with the xat-rag context.
+    language:
+      type: string
+      # The template extra-rules@1 writes this value into trusted text that the model reads as an instruction.
+      # So the value must be from a fixed list. Do not put free text into a trusted section.
+      enum: [English, German, French, Spanish, Greek]
+steps:
+  - id: system
+    uses: prompt.system
+    with:
+      text: "${input.system_prompt}"
+  - id: user
+    uses: prompt.user
+    with:
+      text: "${input.prompt}"
+  - id: caller-context
+    uses: prompt.context
+    with:
+      text: "${input.context}"
+      label: caller-context
+  - id: kb
+    uses: rag.retrieve
+    with:
+      profile: default
+  - id: extra
+    uses: prompt.append
+    with:
+      template: extra-rules@1
+      name: extra
+  - id: assemble
+    uses: prompt.assemble
+    with:
+      reserveOutput: 800
+      order: [caller-context, kb, extra]
+  - id: generate
+    uses: llm.generate
+  - id: citations
+    uses: answer.verify-citations

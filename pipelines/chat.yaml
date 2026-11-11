@@ -1,0 +1,26 @@
+# Sends the prompt of the caller to the LLM. This pipeline does no retrieval.
+name: chat
+version: 1
+summary: Sends a prompt to the LLM with no retrieval.
+stream: allowed
+input:
+  type: object
+  required: [prompt]
+  additionalProperties: false
+  properties:
+    prompt:
+      type: string
+      minLength: 1
+      maxLength: 20000
+    system_prompt:
+      type: string
+      maxLength: 20000
+steps:
+  - uses: prompt.system
+    with:
+      text: "${input.system_prompt}"
+  - uses: prompt.user
+    with:
+      text: "${input.prompt}"
+  - uses: prompt.assemble
+  - uses: llm.generate

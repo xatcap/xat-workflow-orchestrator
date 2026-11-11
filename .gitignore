@@ -1,0 +1,14 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+
+# IDE and machine files
+*.user
+.vs/
+.idea/
+.DS_Store
+
+# Local configuration
+appsettings.*.local.json
