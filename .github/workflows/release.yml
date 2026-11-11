@@ -11,13 +11,16 @@ permissions:
   contents: read
 
 jobs:
-  # This job runs the repository code. It has read access only.
-  build:
+  release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The job needs write access to create the GitHub release.
+    permissions:
+      contents: write
     env:
       TAG: ${{ github.ref_name }}
     steps:
+      # The token is not stored in the local git configuration.
       - name: Check out the code
         uses: actions/checkout@v4
         with:
@@ -51,35 +54,13 @@ jobs:
           mkdir -p artifacts/release
           (cd artifacts/publish && zip -r "../release/xat-orchestrator-${TAG}.zip" .)
 
-      - name: Upload the archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-archive
-          path: artifacts/release/*.zip
-          if-no-files-found: error
-
-  # This job does not run repository code. It has write access to create the release.
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    env:
-      TAG: ${{ github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Download the archive
-        uses: actions/download-artifact@v4
-        with:
-          name: release-archive
-          path: release
-
+      # Only this step receives the token. The archive goes to the release, not to the run.
       - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "$TAG"
-          "release/xat-orchestrator-${TAG}.zip"
-          --repo "$GITHUB_REPOSITORY"
+          "artifacts/release/xat-orchestrator-${TAG}.zip"
           --title "$TAG"
           --generate-notes
           --verify-tag
