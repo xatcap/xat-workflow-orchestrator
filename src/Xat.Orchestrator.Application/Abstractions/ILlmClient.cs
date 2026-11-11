@@ -17,9 +17,4 @@ public interface ILlmClient
     /// <param name="ct">The token that cancels the call.</param>
     /// <returns>The parts of the answer, or an error as the last item.</returns>
     IAsyncEnumerable<Result<CompletionDelta>> StreamAsync(LlmRequest request, CancellationToken ct);
-
-    /// <summary>Lists the model IDs that the engine offers.</summary>
-    /// <param name="ct">The token that cancels the call.</param>
-    /// <returns>The model IDs in the form <c>provider/model</c>, or the error.</returns>
-    Task<Result<IReadOnlyList<string>>> ListModelsAsync(CancellationToken ct);
 }

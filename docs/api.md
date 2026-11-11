@@ -1,6 +1,6 @@
 # API reference
 
-This page lists the HTTP routes, the pipeline file format and the settings of xat-workflow-orchestrator. It also describes the OpenAI-compatible route and the ingestion proxy. To start the orchestrator, read the [quickstart](quickstart.md). For the design, read the [architecture](architecture.md).
+This page lists the HTTP routes, the pipeline file format and the settings of xat-workflow-orchestrator. It also describes the ingestion proxy. To start the orchestrator, read the [quickstart](quickstart.md). For the design, read the [architecture](architecture.md).
 
 - [Conventions](#conventions)
 - [Security](#security)
@@ -9,7 +9,6 @@ This page lists the HTTP routes, the pipeline file format and the settings of xa
 - [Streamed runs](#streamed-runs)
 - [Asynchronous runs](#asynchronous-runs)
 - [Webhooks](#webhooks)
-- [OpenAI-compatible API](#openai-compatible-api)
 - [Ingestion proxy](#ingestion-proxy)
 - [Pipeline files](#pipeline-files)
 - [Built-in steps](#built-in-steps)
@@ -23,7 +22,7 @@ This page lists the HTTP routes, the pipeline file format and the settings of xa
 
 The default base URL is `http://127.0.0.1:8430`. The `Urls` setting changes it. Use a loopback address only. See [Security](#security).
 
-Bodies are JSON in UTF-8. Response names use snake_case, for example `run_id`. A POST body must have the content type `application/json`. Another content type gives 400 `request.content_type`. The OpenAI-compatible route and the ingestion proxy have their own rules. See their sections.
+Bodies are JSON in UTF-8. Response names use snake_case, for example `run_id`. A POST body must have the content type `application/json`. Another content type gives 400 `request.content_type`. The ingestion proxy has its own rules. See [Ingestion proxy](#ingestion-proxy).
 
 Pipeline names, retrieval aliases and model aliases match `[a-z0-9][a-z0-9-]{0,63}`. Step IDs in a pipeline file also allow an underscore.
 
@@ -44,20 +43,20 @@ The orchestrator accepts only the host names `localhost`, `127.0.0.1` and `[::1]
 
 ## Security
 
-The orchestrator has no authentication and no API key. This is a decision of the project owner. Access control will come later. The OpenAI-compatible route accepts any API key and ignores it.
+The orchestrator has no authentication and no API key. This is a decision of the project owner. Access control will come later.
 
 The orchestrator listens on loopback only. It refuses to start when a listen address is not loopback. The check covers the `urls` setting, the `--urls` option, the `ASPNETCORE_URLS` variable and the `Kestrel:Endpoints` setting. If the server binds to another address, the orchestrator stops and exits with code 1.
 
 The upstream services also have no authentication. The orchestrator accepts only loopback `http` addresses for xat-rag and xat-llm-engine.
 
-Any program on the same machine can call every route. This includes the run routes, the asynchronous run routes, the catalog routes, the OpenAI-compatible route and the ingestion routes. A program on the same machine can read and cancel every asynchronous run.
+Any program on the same machine can call every route. This includes the run routes, the asynchronous run routes, the catalog routes and the ingestion routes. A program on the same machine can read and cancel every asynchronous run.
 
 Warning: the ingestion routes have no authentication. Any program on the same machine can upload documents, delete documents and rebuild a RAG. The routes that delete or rebuild are on by default. Turn them off with `Ingestion:DisabledRoutes`. See [Ingestion proxy](#ingestion-proxy).
 
 The orchestrator also has these protections:
 
 - A POST body must have the content type `application/json`. A web form cannot send that type, so a cross-site form post is refused.
-- A request with an `Origin` header gets 403 `request.origin_not_allowed`. A browser adds this header to a request from a web page. So a web page cannot call the orchestrator, even with a request that needs no preflight. The error has the normal form on every route, including the OpenAI-compatible route. Programs such as `curl` send no `Origin` header, so they are not affected. A browser-based client cannot use the orchestrator.
+- A request with an `Origin` header gets 403 `request.origin_not_allowed`. A browser adds this header to a request from a web page. So a web page cannot call the orchestrator, even with a request that needs no preflight. The error has the normal form on every route. Programs such as `curl` send no `Origin` header, so they are not affected. A browser-based client cannot use the orchestrator.
 - The Host filter refuses other host names. See [Conventions](#conventions).
 - The orchestrator sends no CORS headers.
 - Error responses never show exception text.
@@ -67,7 +66,7 @@ The orchestrator also has these protections:
 
 ## Errors
 
-Each error has the same body. The OpenAI-compatible route is the exception. It has its own body, except for the 403 of a request with an `Origin` header, which has the standard body. See [OpenAI-compatible errors](#openai-compatible-errors).
+Each error has the same body.
 
 ```json
 {"error": {"type": "not_found_error", "message": "The pipeline does not exist.", "code": "pipeline.not_found", "run_id": null}}
@@ -84,7 +83,7 @@ The class of an error sets the HTTP status and the `type`:
 
 | Type | Status | Used for |
 |---|---|---|
-| `invalid_request_error` | 400 | A bad body, bad input, a bad step option, a prompt that is too large, a bad `mode` or a bad webhook address. |
+| `invalid_request_error` | 400 | A bad body, bad input, a bad step option, a bad `mode` or a bad webhook address. |
 | `invalid_request_error` | 403 | The request has an `Origin` header. See [Security](#security). |
 | `invalid_request_error` | 413 | The body is larger than `Api:MaxRequestBodyBytes`, or an upload is larger than `Ingestion:MaxUploadBytes`. |
 | `not_found_error` | 404 | An unknown pipeline, model alias or run. A route that the operator turned off. |
@@ -119,7 +118,6 @@ The main codes are these:
 | `retrieve.no_query` | 400 | The step has no question text. |
 | `retrieve.query_too_long` | 400 | The question is longer than 20000 characters. |
 | `prompt.user_empty` | 400 | The prompt of the caller is empty. |
-| `prompt.too_large` | 400 | The fixed parts of the prompt do not fit the context window of the model. |
 | `expression.invalid` | 400 | An expression reads a value that cannot be used in text or JSON. |
 | `llm.model_unknown` | 404 | The model alias in a step is not configured. |
 | `llm.empty_answer` | 502 | The model returned an empty answer. |
@@ -182,8 +180,6 @@ Retry-After: 1
 | [`POST /v1/ask`](#post-v1ask) | Run the default pipeline. Add `?mode=async` to queue the run. |
 | [`GET /v1/steps`](#get-v1steps) | List the step types. |
 | [`GET /v1/contexts`](#get-v1contexts) | List the retrieval aliases. |
-| [`GET /v1/models`](#get-v1models) | List the pipelines that the OpenAI-compatible route can call, and the model aliases. |
-| [`POST /v1/chat/completions`](#openai-compatible-api) | Run a pipeline with the OpenAI chat format. The model is `pipeline/<name>`. |
 | [`GET /v1/runs/{id}`](#read-a-run) | Read the state of an asynchronous run. |
 | [`DELETE /v1/runs/{id}`](#cancel-a-run) | Cancel an asynchronous run. |
 | [`GET /v1/rags`](#ingestion-proxy) | List the RAGs of xat-rag. |
@@ -301,7 +297,7 @@ An asynchronous run returns 202 with the run ID at once. See [Asynchronous runs]
 | `answer.citations[].chunk_id` | string | The ID of the cited chunk. |
 | `answer.citations[].title` | string | The title of the document. |
 | `answer.citations[].uri` | string | The link to the document. The value is empty when the link has a scheme other than `http` or `https`. |
-| `usage.prompt_tokens` | integer | The tokens that the LLM requests used. The value is an estimate in the orchestrator. |
+| `usage.prompt_tokens` | integer | The prompt tokens that xat-llm-engine reported for the model calls of the run. |
 | `usage.completion_tokens` | integer | The tokens that the answers used. |
 | `warnings` | list of text | Notes about the run. A warning is not an error. |
 | `debug` | object or null | The step times, when `debug` is `true`. Otherwise `null`. |
@@ -377,7 +373,7 @@ curl -s http://127.0.0.1:8430/v1/steps
 ```
 
 ```json
-{"steps":[{"name":"answer.verify-citations","summary":"Maps the citations in the answer to the sources.","traits":[]},{"name":"flow.complete-if","summary":"Ends the run with a fixed answer when a condition is true.","traits":["ProducesAnswer"]},{"name":"llm.generate","summary":"Sends the messages to the LLM and stores the answer.","traits":["CallsLlm","Streams","ProducesAnswer"]},{"name":"prompt.append","summary":"Adds an instruction that the pipeline author wrote.","traits":[]},{"name":"prompt.assemble","summary":"Builds the chat messages and fits them into the token budget.","traits":[]},{"name":"prompt.context","summary":"Adds context text that the caller sent, in an escaped tag.","traits":[]},{"name":"prompt.system","summary":"Sets the system prompt from a text or a template.","traits":[]},{"name":"prompt.user","summary":"Sets the prompt of the caller.","traits":[]},{"name":"rag.retrieve","summary":"Gets the chunks of one xat-rag context for a question.","traits":["Idempotent"]},{"name":"retrieval.merge","summary":"Merges the chunks of several retrieval steps.","traits":["Idempotent"]}]}
+{"steps":[{"name":"answer.verify-citations","summary":"Maps the citations in the answer to the sources.","traits":[]},{"name":"flow.complete-if","summary":"Ends the run with a fixed answer when a condition is true.","traits":["ProducesAnswer"]},{"name":"llm.generate","summary":"Sends the messages to the LLM and stores the answer.","traits":["CallsLlm","Streams","ProducesAnswer"]},{"name":"prompt.append","summary":"Adds an instruction that the pipeline author wrote.","traits":[]},{"name":"prompt.assemble","summary":"Builds the chat messages from the prompt parts and numbers the sources.","traits":[]},{"name":"prompt.context","summary":"Adds context text that the caller sent, in an escaped tag.","traits":[]},{"name":"prompt.system","summary":"Sets the system prompt from a text or a template.","traits":[]},{"name":"prompt.user","summary":"Sets the prompt of the caller.","traits":[]},{"name":"rag.retrieve","summary":"Gets the chunks of one xat-rag context for a question.","traits":["Idempotent"]},{"name":"retrieval.merge","summary":"Merges the chunks of several retrieval steps.","traits":["Idempotent"]}]}
 ```
 
 The options of each built-in step are in [Built-in steps](#built-in-steps).
@@ -391,56 +387,18 @@ Lists the retrieval aliases from `Retrieval:Profiles`. A pipeline uses an alias 
 | `alias` | The name that pipelines use. |
 | `context` | The name of the xat-rag context. |
 | `chunks` | The default number of chunks. |
-| `available` | `true` when xat-rag lists the context. `false` when it does not. `null` when the call to xat-rag that lists the contexts fails or takes more than 2 seconds, for example because xat-rag is not reachable. |
 
 ```bash
 curl -s http://127.0.0.1:8430/v1/contexts
 ```
 
-With no xat-rag running (real output):
+Example output with the shipped configuration:
 
 ```json
-{"contexts":[{"alias":"default","context":"ask-all","chunks":8,"available":null},{"alias":"diffs","context":"ask-diffs","chunks":5,"available":null},{"alias":"docs","context":"ask-docs","chunks":5,"available":null},{"alias":"jira","context":"ask-jira","chunks":5,"available":null}]}
+{"contexts":[{"alias":"default","context":"ask-all","chunks":8},{"alias":"diffs","context":"ask-diffs","chunks":5},{"alias":"docs","context":"ask-docs","chunks":5},{"alias":"jira","context":"ask-jira","chunks":5}]}
 ```
 
-This route calls xat-rag on each request. Each call is outside the rate limiter. The call to xat-rag has a time limit of 2 seconds. A slow xat-rag gives `available: null`, and the route still answers.
-
-### GET /v1/models
-
-Lists the pipelines that the OpenAI-compatible route can call, and the model aliases from `Llm:Models`. The fields `object` and `data` follow the OpenAI list of models. The fields `default_model` and `models` list the model aliases.
-
-| Field | Meaning |
-|---|---|
-| `object` | Always `list`. |
-| `data` | The pipelines that a plain chat request can call. The rules are below the table. |
-| `data[].id` | The model name in the form `pipeline/<name>`. Send it as `model` in a chat request. |
-| `data[].object` | Always `model`. |
-| `data[].created` | Always `0`. |
-| `data[].owned_by` | Always `xat-workflow-orchestrator`. |
-| `default_model` | The alias that steps use when they name no model. |
-| `models[].alias` | The name that pipelines use. |
-| `models[].model` | The model ID in the form `provider/model`. |
-| `models[].context_window` | The size of the context window in tokens. |
-| `models[].supports_grammar` | The value of the setting. The orchestrator does not send grammars yet. |
-| `models[].available` | `true` when xat-llm-engine lists the model. `false` when it does not. `null` when the call to xat-llm-engine that lists the models fails or takes more than 2 seconds, for example because xat-llm-engine is not reachable. |
-
-A pipeline is listed in `data` when all of these rules hold:
-
-- Its input schema has an input named `prompt`.
-- It needs no required input, except `system_prompt`.
-- Its stream mode is not `required`.
-
-The call to xat-llm-engine has a time limit of 2 seconds. A slow xat-llm-engine gives `available: null`, and the route still answers.
-
-```bash
-curl -s http://127.0.0.1:8430/v1/models
-```
-
-With no xat-llm-engine running (real output). The `available` value is `null` in this case:
-
-```json
-{"object":"list","data":[{"id":"pipeline/chat","object":"model","created":0,"owned_by":"xat-workflow-orchestrator"},{"id":"pipeline/custom-prompt","object":"model","created":0,"owned_by":"xat-workflow-orchestrator"},{"id":"pipeline/rag-qa","object":"model","created":0,"owned_by":"xat-workflow-orchestrator"},{"id":"pipeline/rag-sequential","object":"model","created":0,"owned_by":"xat-workflow-orchestrator"}],"default_model":"default","models":[{"alias":"default","model":"local/ministral-3-3b","context_window":8192,"supports_grammar":true,"available":null}]}
-```
+This route reads the configuration only. It does not call xat-rag, so it does not show whether xat-rag has the context.
 
 ## Streamed runs
 
@@ -748,297 +706,6 @@ Warning: the value `*` lets a caller send requests to any address that the machi
 This rule limits where the orchestrator sends requests. It is not authentication. The error messages never repeat the address.
 
 The orchestrator sends the full address to the receiver, with its query. It stores and shows only the scheme, the host and the port. The full address stays in memory until the delivery ends. See [Allow another webhook host](quickstart.md#allow-another-webhook-host) to change the list.
-
-## OpenAI-compatible API
-
-The route `POST /v1/chat/completions` lets a program use an OpenAI library with a pipeline. The model name is `pipeline/<name>`. The route changes the request and the answer to the OpenAI format. It runs the same engine as the other run routes. It does not call the OpenAI service.
-
-The route has no authentication. It accepts any API key and ignores the `Authorization` header. See [Security](#security).
-
-### Callable pipelines
-
-A pipeline can be called through this route when its input schema has an input named `prompt`. All shipped pipelines have this input.
-
-A pipeline without this input gives 400 `request.pipeline_not_chat`. Call such a pipeline with [`POST /v1/pipelines/{name}/runs`](#post-v1pipelinesnameruns).
-
-[`GET /v1/models`](#get-v1models) lists the pipelines that a plain chat request can call. A request can call other pipelines too, when `xat.input` gives their other required inputs.
-
-### Request fields
-
-The body has these fields:
-
-| Field | Meaning |
-|---|---|
-| `model` | Required. The form is `pipeline/<name>`. A missing value gives 400 `request.model_missing`. A value without the prefix gives 400 `request.model_invalid`. An unknown name gives 404 `model.not_found`. |
-| `messages` | Required. A list with at least one message. Each message has a `role` and a `content`. |
-| `stream` | Set `true` to receive a stream. The stream mode of the pipeline applies. A value that is not `true`, `false` or `null` gives 400 `request.invalid_field`. See [Streamed responses](#streamed-responses). |
-| `stream_options` | Set `include_usage` to `true` to receive a usage piece at the end of a stream. A value that is not an object or `null` gives 400 `request.invalid_field`. |
-| `xat` | An object with the extension fields. See [Extension fields](#extension-fields). |
-
-#### Message mapping
-
-The route maps the messages to the inputs of the pipeline:
-
-| Messages | Use in the pipeline |
-|---|---|
-| The last message with the role `user` | The input `prompt`. |
-| All messages with the role `system` or `developer` | Joined with a blank line into the input `system_prompt`. The pipeline must declare this input. Otherwise the route adds a note to `warnings`. |
-| Earlier messages with the role `user` or `assistant` | Not used. The route adds a note to `warnings` that gives the number of these messages. |
-
-The allowed roles are these:
-
-- `system`
-- `developer`
-- `user`
-- `assistant`
-
-Another role gives 400 `request.unsupported_role`. A message without a role gives 400 `request.message_invalid`.
-
-The `content` field is a text, or a list of parts. Each part must have the type `text`. The route joins the texts of the parts with a newline. Another part type, such as an image, gives 400 `request.unsupported_content`.
-
-#### Extension fields
-
-The `xat` object carries the values that the OpenAI format has no place for. The route uses these fields:
-
-- `xat.input` is an object. Each key is an input of the pipeline, for example `context` or `language`. The values must match the input schema, as in any run.
-- `xat.debug` set to `true` adds the step times to the response.
-
-The messages win for `prompt`. The route always sets `prompt` from the last user message. For `system_prompt`, the messages win only when the request has system or developer messages. Otherwise the value in `xat.input` is used, if the request sets one. Other values in `xat.input` keep their values.
-
-```json
-{
-  "model": "pipeline/custom-prompt",
-  "messages": [
-    {"role": "system", "content": "You are support."},
-    {"role": "user", "content": "Which port?"}
-  ],
-  "xat": {"input": {"context": "Customer uses v2.", "language": "German"}, "debug": true}
-}
-```
-
-#### Fields that the route ignores
-
-The route accepts these fields and ignores them. The route adds one note to `warnings` for the fields that the request sets to a value other than `null`. The pipeline sets these values:
-
-- `temperature`
-- `max_tokens`
-- `max_completion_tokens`
-- `top_p`
-- `frequency_penalty`
-- `presence_penalty`
-- `seed`
-- `stop`
-- `user`
-- `logit_bias`
-- `logprobs`
-- `top_logprobs`
-- `store`
-- `metadata`
-- `service_tier`
-- `reasoning_effort`
-
-#### Fields that the route refuses
-
-The route refuses these fields with 400 `request.unsupported_field`. A field with the value `null` is accepted.
-
-- `tools`
-- `tool_choice`
-- `functions`
-- `function_call`
-- `audio`
-- `modalities`
-- `prediction`
-- `parallel_tool_calls`
-- `n`, when the value is not `1`
-- `response_format`, when the type is not `text`
-
-Pipelines do not call tools, and they do not return structured output yet.
-
-### Response fields
-
-A request without `stream` gets 200 and a `chat.completion` object. The response has the content type `application/json`. The object has these fields:
-
-| Field | Meaning |
-|---|---|
-| `id` | The text `chatcmpl-` followed by the run ID. |
-| `object` | Always `chat.completion`. |
-| `created` | The time at which the route accepted the request, in Unix seconds. |
-| `model` | The model name from the request. |
-| `choices` | A list with one item. The item has `index` `0`, a `message` with the role `assistant` and the answer, and `finish_reason` `stop`. |
-| `usage` | `prompt_tokens`, `completion_tokens` and `total_tokens`. The values are the sums for the whole run. |
-| `xat` | The extension object. See below. |
-
-The `xat` object has these fields:
-
-| Field | Meaning |
-|---|---|
-| `run_id` | The ID of the run. |
-| `pipeline` | The name of the pipeline. |
-| `status` | `answered`, or `no_answer` when a step ended the run without an answer. |
-| `citations` | The sources that the answer cites. The items have the same form as in the native response. |
-| `warnings` | The notes about the mapping first, then the notes about the run. An empty list means no note. |
-| `debug` | Only when `xat.debug` is `true`. An object with the list `steps`. Each item has `id`, `uses` and `duration_ms`. |
-
-The header `X-Run-Id` holds the run ID when the run started.
-
-Example with xat-rag and xat-llm-engine running. The values depend on your data and model. This output comes from a test run with example data:
-
-```json
-{"id":"chatcmpl-run_1ba18c4431a04fa0b0a1","object":"chat.completion","created":1794397421,"model":"pipeline/rag-qa","choices":[{"index":0,"message":{"role":"assistant","content":"The orders service uses port 8080 [1]."},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":9,"total_tokens":109},"xat":{"run_id":"run_1ba18c4431a04fa0b0a1","pipeline":"rag-qa","status":"answered","citations":[{"number":1,"chunk_id":"docs:orders.md#h/ports","title":"Orders","uri":"https://example.test/orders.md"}],"warnings":[]}}
-```
-
-A request with notes in `warnings` looks like this. The request has two earlier messages, and it sets two fields that the route ignores. This is the `xat` object of a real response:
-
-```json
-"xat":{"run_id":"run_97ab8ea56d4845d3b188","pipeline":"chat","status":"answered","citations":[],"warnings":["2 earlier message(s) were not used. The pipeline answers the last user message only.","The fields temperature, max_tokens were not used. The pipeline sets them."]}
-```
-
-### Streamed responses
-
-Set `stream` to `true`. The response has the content type `text/event-stream`. The response has only `data:` lines. It has no `event:` lines. The pieces come in this order:
-
-- A first piece with the role `assistant` and an empty `content`.
-- One piece for each new part of the answer. The text is in `delta.content`.
-- A finish piece with `finish_reason` `stop` and the `xat` object.
-- A usage piece with an empty `choices` list. The route sends it only when `stream_options.include_usage` is `true`.
-- The line `data: [DONE]`.
-
-The route sends the status 200 when the first piece is ready. An error before this point is a normal HTTP error. It has the status of the error and the error body. An error after this point is one `data:` line with the error body. The stream then has no `data: [DONE]` line.
-
-If the event channel of the run closes with no last event, the route sends the error `run.stream_lost`. It has the status 500 and the type `internal_error`. Before the first piece, this is a normal HTTP error. After it, this is a `data:` line, as described above.
-
-A step that ends the run without streaming, for example the no-answer path, sends its text as one piece.
-
-When the caller disconnects, the run is cancelled. The cancel also stops an upstream call that is running.
-
-Example with xat-rag and xat-llm-engine running. This output comes from a test run with example data:
-
-```text
-data: {"id":"chatcmpl-run_64d55a9a7e1346088b33","object":"chat.completion.chunk","created":1794397427,"model":"pipeline/rag-qa","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-run_64d55a9a7e1346088b33","object":"chat.completion.chunk","created":1794397427,"model":"pipeline/rag-qa","choices":[{"index":0,"delta":{"content":"The orders service uses port 8080"},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-run_64d55a9a7e1346088b33","object":"chat.completion.chunk","created":1794397427,"model":"pipeline/rag-qa","choices":[{"index":0,"delta":{"content":" [1]."},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-run_64d55a9a7e1346088b33","object":"chat.completion.chunk","created":1794397427,"model":"pipeline/rag-qa","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"xat":{"run_id":"run_64d55a9a7e1346088b33","pipeline":"rag-qa","status":"answered","citations":[{"number":1,"chunk_id":"docs:orders.md#h/ports","title":"Orders","uri":"https://example.test/orders.md"}],"warnings":[]}}
-
-data: {"id":"chatcmpl-run_64d55a9a7e1346088b33","object":"chat.completion.chunk","created":1794397427,"model":"pipeline/rag-qa","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":9,"total_tokens":109}}
-
-data: [DONE]
-```
-
-The stream mode of the pipeline applies. A pipeline with `stream: never` gives 400 `stream.not_supported` when `stream` is `true`. A pipeline with `stream: required` gives 400 `stream.required` when `stream` is not `true`.
-
-### OpenAI-compatible errors
-
-Errors have the OpenAI form:
-
-```json
-{"error":{"message":"The model does not exist. GET /v1/models lists the names.","type":"not_found_error","param":null,"code":"model.not_found"}}
-```
-
-The `type` and the HTTP status are the same as in the other routes. The `param` field is always `null`. The error body has no `run_id` field. The header `X-Run-Id` holds the run ID when the run started. A 503 has a `Retry-After` header.
-
-These codes are specific to this route:
-
-| Code | Status | Cause |
-|---|---|---|
-| `request.invalid_json` | 400 | The body is not JSON, or it is not a JSON object. |
-| `request.content_type` | 400 | The content type is not `application/json`. |
-| `request.model_missing` | 400 | The field `model` is missing, or it is not a text. |
-| `request.model_invalid` | 400 | The model does not start with `pipeline/`. |
-| `model.not_found` | 404 | No pipeline has this name. |
-| `request.messages_missing` | 400 | The field `messages` is missing, or the list is empty. |
-| `request.message_invalid` | 400 | A message is not an object, or it has no role. |
-| `request.unsupported_role` | 400 | The role is not `system`, `developer`, `user` or `assistant`. |
-| `request.unsupported_content` | 400 | A content part has a type other than `text`. |
-| `request.no_user_message` | 400 | No message has the role `user`. |
-| `request.pipeline_not_chat` | 400 | The pipeline has no input named `prompt`. |
-| `request.unsupported_field` | 400 | The request sets a refused field. |
-| `request.invalid_field` | 400 | The field `stream` is not `true`, `false` or `null`, or the field `stream_options` is not an object or `null`. |
-| `stream.not_supported` | 400 | The pipeline has `stream: never`, and the request sets `stream` to `true`. |
-| `stream.required` | 400 | The pipeline has `stream: required`, and the request does not set `stream` to `true`. |
-| `input.invalid` | 400 | The input does not match the input schema. For example, the last user message is empty. |
-| `admission.full` | 503 | All run slots and all queue places are in use. |
-| `run.stream_lost` | 500 | The event channel of the run closed before the run ended. See [Streamed responses](#streamed-responses). |
-
-Errors from a run, such as `xat-rag.unreachable`, have the same codes and statuses as in the [errors](#errors) table.
-
-### Example with curl
-
-This example needs xat-rag and xat-llm-engine running:
-
-```bash
-curl -s -X POST http://127.0.0.1:8430/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "pipeline/rag-qa", "messages": [{"role": "user", "content": "Which port does the orders service use?"}]}'
-```
-
-For a stream, add `"stream": true` and use the `-N` option of curl:
-
-```bash
-curl -N -X POST http://127.0.0.1:8430/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "pipeline/rag-qa", "stream": true, "stream_options": {"include_usage": true}, "messages": [{"role": "user", "content": "Which port does the orders service use?"}]}'
-```
-
-### Example with the official OpenAI Python library
-
-Install the `openai` package in a virtual environment:
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install openai
-```
-
-Then run this script. It needs xat-rag and xat-llm-engine running:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(base_url="http://127.0.0.1:8430/v1", api_key="anything")
-
-completion = client.chat.completions.create(
-    model="pipeline/rag-qa",
-    messages=[{"role": "user", "content": "Which port does the orders service use?"}],
-)
-print(completion.choices[0].message.content)
-print(completion.model_extra["xat"]["run_id"])
-```
-
-The API key can have any value, because the orchestrator does not check it. The output of this script is the answer, followed by the run ID. The library puts the `xat` object in `model_extra`. This is the real output of the script:
-
-```text
-The orders service uses port 8080 [1].
-run_daebd1ea619e47639b88
-```
-
-This example streams the answer:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(base_url="http://127.0.0.1:8430/v1", api_key="anything")
-
-stream = client.chat.completions.create(
-    model="pipeline/rag-qa",
-    messages=[{"role": "user", "content": "Which port does the orders service use?"}],
-    stream=True,
-)
-for chunk in stream:
-    if chunk.choices and chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="", flush=True)
-print()
-```
-
-The route was tested with the official `openai` package for Python.
-
-### Known limits of this route
-
-- The route uses only the last user message. Earlier turns are not used. The `warnings` field says so.
-- The route has no tools, no structured output and no more than one choice.
-- The `usage` values are the sums for the whole run. They are not the values of one model call.
-- The system and developer messages go to `system_prompt`. The assemble step does not escape this text, as for the native `system_prompt` input. See [Security](#security).
 
 ## Ingestion proxy
 
@@ -1377,17 +1044,16 @@ Set exactly one of `isEmpty` and `equals`. Results: none.
 
 Builds the chat messages from all parts that the earlier steps added. The step does these tasks:
 
-- It escapes text from documents and from the caller, and puts it in tags.
+- It escapes text from documents and the text of `prompt.context` steps, and puts it in tags. It does not escape the prompt of the caller. The prompt of the caller is the user message.
 - It numbers the sources, so the model can cite them as `[n]`.
-- It removes chunks from the end when the prompt does not fit the token budget. It adds a warning to the result.
+
+The step sends every chunk. It does not limit the size of the prompt. The size depends on the `Chunks` value of the retrieval profile and on xat-llm-engine. The engine decides how much it accepts.
 
 | Option | Type | Default | Meaning |
 |---|---|---|---|
-| `model` | alias | `Llm:DefaultModel` | The model alias. The context window and the tokenizer come from this model. |
-| `reserveOutput` | integer, 0 to 1000000 | `800` | The number of tokens that the step keeps free for the answer. |
 | `order` | list of section names | The order in which the steps added the sections | The order of the sections in the prompt. A section that the list does not name goes after the named sections. |
 
-Results: none. The messages are part of the run state, not of the `steps` values. Errors: `prompt.too_large`, `prompt.no_user`, `prompt.chunks_missing`.
+Results: none. The messages are part of the run state, not of the `steps` values. Errors: `prompt.no_user`, `prompt.chunks_missing`.
 
 ### llm.generate
 
@@ -1468,7 +1134,7 @@ Flow:
 2. `user` sets the prompt of the caller from `prompt`.
 3. `retrieve` asks the alias from `context`, or `default`, for chunks.
 4. `no-sources` ends the run with a fixed answer when there are no chunks.
-5. `assemble` builds the messages within the token budget.
+5. `assemble` builds the messages from all chunks.
 6. `generate` asks the model. The temperature is 0.2.
 7. `citations` maps the `[n]` numbers to the sources.
 
@@ -1627,13 +1293,12 @@ The shipped aliases are `default` (context `ask-all`, 8 chunks), `docs` (`ask-do
 |---|---|---|
 | `Llm:DefaultModel` | `default` | The model alias that steps use when they name no model. It must exist in `Llm:Models`. |
 | `Llm:Models:<alias>:Model` | None, required | The model ID in the form `provider/model`. |
-| `Llm:Models:<alias>:ContextWindow` | `8192` in the class | The context window in tokens. The value must be 256 or higher. |
-| `Llm:Models:<alias>:Tokenizer` | `estimate` | The only supported value is `estimate`. See [Limits](#limits). |
 | `Llm:Models:<alias>:Parallel` | `1` | The value must be 1 or higher. The orchestrator stores the value and does not use it to limit requests yet. |
-| `Llm:Models:<alias>:SupportsGrammar` | `false` | The value shows in `GET /v1/models`. The orchestrator does not send grammars yet. |
 | `Llm:Models:<alias>:AllowedFields` | Empty list | The top-level request fields that the adapter may send to xat-llm-engine. The adapter sends no other field. |
 
-The shipped alias `default` uses the model `local/ministral-3-3b`. Its `AllowedFields` lists `temperature`, `max_tokens`, `stream_options`, `response_format` and `grammar`. The steps send only `temperature` and the token limit. A setting that is not in `AllowedFields` is not sent, and the adapter does not report it.
+The shipped alias `default` uses the model `local/ministral-3-3b`. Its `AllowedFields` lists `temperature`, `max_tokens` and `stream_options`. The steps send only `temperature` and the token limit. A setting that is not in `AllowedFields` is not sent, and the adapter does not report it.
+
+The orchestrator does not accept a key that it does not know under `Llm`. The orchestrator does not start with such a key. The error names the key. Remove the key from the file.
 
 ### Pipelines and Prompts
 
@@ -1672,7 +1337,6 @@ A relative folder starts at the folder of the orchestrator program. The build co
 | Time of a hook | 5 seconds for each hook call | Fixed in the code |
 | Time of a health check of an upstream | 3 seconds | Fixed in the code |
 | Length of an upstream message in an error | 300 characters | Fixed in the code |
-| Token count | The orchestrator estimates 3 characters for each token. | Fixed in the code |
 | Asynchronous runs at the same time | 2 by default | `Jobs:Workers` |
 | Asynchronous runs that wait | 64 by default. A run above this number gets 503 `jobs.queue_full`. | `Jobs:QueueLimit` |
 | Finished runs kept | 500 runs by default. A finished run stays for 60 minutes by default. | `Jobs:RetainFinished` and `Jobs:RetentionMinutes` |
@@ -1682,9 +1346,7 @@ A relative folder starts at the folder of the orchestrator program. The build co
 | Retries of a webhook | 3 by default, and at most 10 | `Webhooks:RetryCount` |
 | Upload size for the ingestion proxy | 64 MiB by default, and from 1024 bytes to 1 GiB. A declared size above the limit gives 413 `request.too_large`. A larger upload without a declared size gets the same error. | `Ingestion:MaxUploadBytes` |
 | Inactivity of an ingestion request | 120 seconds by default, and from 1 to 3600 seconds. A request without data for this time gives 504 `xat-rag.timeout`. | `Ingestion:ActivityTimeoutSeconds` |
-| Runs of the OpenAI-compatible route | The same limits as the run routes. | `Api:MaxConcurrentRuns` and `Api:QueueLimit` |
-| Time of the list calls for `GET /v1/contexts` and `GET /v1/models` | 2 seconds for each call to xat-rag or xat-llm-engine. A slow call gives `available: null`. | Fixed in the code |
 
-The token count is an estimate. The orchestrator has no tokenizer for the model. The count of xat-rag, `size_tokens`, is not a count of model tokens. The estimate is high on purpose, so the prompt stays inside the context window. The prompt budget also keeps `reserveOutput` tokens free for the answer.
+The orchestrator does not limit the size of a prompt. It sends every chunk of a retrieval. The size of the prompt depends on the `Chunks` value of the retrieval profile. xat-llm-engine decides which prompt sizes it accepts.
 
 The orchestrator has no idle timeout for a stream. A caller that stops reading keeps the connection open until the caller closes it.

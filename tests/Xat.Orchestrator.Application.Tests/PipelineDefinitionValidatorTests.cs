@@ -28,7 +28,7 @@ public class PipelineDefinitionValidatorTests
     [InlineData("""[{"id":"r","uses":"rag.retrieve","with":"{\"profile\":\"missing\"}"},{"id":"g","uses":"llm.generate"}]""", "not configured")]
     [InlineData("""[{"id":"r","uses":"rag.retrieve","with":"{}"},{"id":"g","uses":"llm.generate"}]""", "Profile field is required")]
     [InlineData("""[{"id":"r","uses":"rag.retrieve","with":"{\"profile\":\"default\",\"typo\":1}"},{"id":"g","uses":"llm.generate"}]""", "typo")]
-    [InlineData("""[{"id":"a","uses":"prompt.assemble","with":"{\"model\":\"missing\"}"},{"id":"g","uses":"llm.generate"}]""", "not configured")]
+    [InlineData("""[{"id":"g","uses":"llm.generate","with":"{\"model\":\"missing\"}"}]""", "not configured")]
     [InlineData("""[{"id":"s","uses":"prompt.system","with":"{\"template\":\"missing@1\"}"},{"id":"g","uses":"llm.generate"}]""", "does not exist")]
     [InlineData("""[{"id":"s","uses":"prompt.system","with":"{\"text\":\"a\",\"template\":\"rules@1\"}"},{"id":"g","uses":"llm.generate"}]""", "exactly one of 'text' and 'template'")]
     [InlineData("""[{"id":"s","uses":"prompt.user","with":"{\"text\":\"${steps.later.out}\"}"},{"id":"later","uses":"rag.retrieve","with":"{\"profile\":\"default\"}"},{"id":"g","uses":"llm.generate"}]""", "name an earlier step")]

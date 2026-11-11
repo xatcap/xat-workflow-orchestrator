@@ -22,19 +22,13 @@ internal sealed class ConfigModelCatalog : IModelCatalog
             entry => new ModelProfile(
                 entry.Key,
                 entry.Value.Model,
-                entry.Value.ContextWindow,
-                entry.Value.Tokenizer,
                 entry.Value.Parallel,
-                entry.Value.SupportsGrammar,
                 entry.Value.AllowedFields.ToList()),
             StringComparer.Ordinal);
     }
 
     /// <inheritdoc/>
     public string DefaultAlias { get; }
-
-    /// <inheritdoc/>
-    public IReadOnlyCollection<ModelProfile> All => _models.Values;
 
     /// <inheritdoc/>
     public Result<ModelProfile> Resolve(string? modelAlias)

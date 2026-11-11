@@ -18,7 +18,7 @@ public sealed class XatEngineLlmClientTests : IDisposable
     private ILlmClient Client => _harness.Get<ILlmClient>();
 
     private static ModelProfile Model(params string[] allowed) =>
-        new("default", "local/test-model", 8192, "estimate", 1, true, allowed);
+        new("default", "local/test-model", 1, allowed);
 
     private static LlmRequest Request(ModelProfile model, double? temperature = null, int? maxTokens = null) =>
         new(model, [new ChatMessage(ChatRole.System, "Be brief."), new ChatMessage(ChatRole.User, "Hello")], temperature, maxTokens);
@@ -204,18 +204,5 @@ public sealed class XatEngineLlmClientTests : IDisposable
         var item = Assert.Single(items);
         Assert.Equal(ErrorKind.Overloaded, item.Error!.Kind);
         Assert.Equal(TimeSpan.FromSeconds(3), item.Error.RetryAfter);
-    }
-
-    /// <summary>The list of models gives the IDs.</summary>
-    [Fact]
-    public async Task ListModels_GivesTheIds()
-    {
-        _harness.Engine.Given(Request().WithPath("/v1/models").UsingGet()).RespondWith(
-            Response.Create().WithStatusCode(200).WithHeader("Content-Type", "application/json")
-                .WithBody("""{"object":"list","data":[{"id":"local/a","object":"model","owned_by":"local"},{"id":"openai/b","object":"model","owned_by":"openai"}]}"""));
-
-        var result = await Client.ListModelsAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(["local/a", "openai/b"], result.Value!);
     }
 }

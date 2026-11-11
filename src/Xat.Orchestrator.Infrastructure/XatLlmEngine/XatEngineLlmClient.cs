@@ -151,36 +151,6 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
         }
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<IReadOnlyList<string>>> ListModelsAsync(CancellationToken ct)
-    {
-        try
-        {
-            using var response = await http.GetAsync("/v1/models", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return Result<IReadOnlyList<string>>.Fail(await UpstreamErrors.FromResponseAsync(response, Name, ct));
-            }
-
-            var text = await response.Content.ReadAsStringAsync(ct);
-            using var document = JsonDocument.Parse(text);
-            var ids = document.RootElement.GetProperty("data")
-                .EnumerateArray()
-                .Select(model => model.GetProperty("id").GetString() ?? string.Empty)
-                .Where(id => id.Length > 0)
-                .ToList();
-            return Result<IReadOnlyList<string>>.Ok(ids);
-        }
-        catch (Exception exception) when (UpstreamErrors.TryMap(exception, Name, ct, out var error))
-        {
-            return Result<IReadOnlyList<string>>.Fail(error);
-        }
-        catch (Exception exception) when (exception is KeyNotFoundException or InvalidOperationException)
-        {
-            return Result<IReadOnlyList<string>>.Fail(InvalidResponse());
-        }
-    }
-
     /// <summary>Builds the request body. The method adds a field only when the model profile lists it.</summary>
     /// <param name="request">The request.</param>
     /// <param name="stream">Shows whether the request asks for a stream.</param>

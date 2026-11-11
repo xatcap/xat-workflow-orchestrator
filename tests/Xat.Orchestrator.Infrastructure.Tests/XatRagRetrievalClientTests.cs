@@ -130,18 +130,4 @@ public sealed class XatRagRetrievalClientTests : IDisposable
         Assert.Equal(ErrorKind.UpstreamUnavailable, result.Error!.Kind);
         Assert.Equal("xat-rag.unreachable", result.Error.Code);
     }
-
-    /// <summary>The catalog lists the contexts and the RAGs.</summary>
-    [Fact]
-    public async Task Catalog_ListsContextsAndRags()
-    {
-        _harness.Rag.Given(Request.Create().WithPath("/v1/rags").UsingGet()).RespondWith(
-            Response.Create().WithStatusCode(200).WithHeader("Content-Type", "application/json")
-                .WithBody("""{"rags":[{"name":"docs","needs_rebuild":false,"documents":3,"chunks":21}],"contexts":["ask-docs","triage"]}"""));
-
-        var result = await Client.GetCatalogAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(["ask-docs", "triage"], result.Value!.Contexts);
-        Assert.Equal(["docs"], result.Value.Rags);
-    }
 }

@@ -36,19 +36,9 @@ internal sealed partial class LlmOptionsValidator : IValidateOptions<LlmOptions>
                 failures.Add($"{prefix}:Model must have the form provider/model.");
             }
 
-            if (model.ContextWindow < 256)
-            {
-                failures.Add($"{prefix}:ContextWindow must be at least 256 tokens.");
-            }
-
             if (model.Parallel < 1)
             {
                 failures.Add($"{prefix}:Parallel must be at least 1.");
-            }
-
-            if (!string.Equals(model.Tokenizer, "estimate", StringComparison.Ordinal))
-            {
-                failures.Add($"{prefix}:Tokenizer '{model.Tokenizer}' is not supported. Use 'estimate'.");
             }
         }
 

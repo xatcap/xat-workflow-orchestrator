@@ -23,9 +23,6 @@ internal sealed class FakeLlmClient : ILlmClient
     /// <summary>Gets or sets an error that the stream sends after its second word. The stream then ends.</summary>
     public PipelineError? StreamFailure { get; set; }
 
-    /// <summary>Gets or sets a time that the list of models waits before it answers. A test uses it to simulate an engine that hangs.</summary>
-    public TimeSpan ListModelsDelay { get; set; }
-
     public async Task<Result<Completion>> CompleteAsync(LlmRequest request, CancellationToken ct)
     {
         lock (Requests)
@@ -58,15 +55,5 @@ internal sealed class FakeLlmClient : ILlmClient
         }
 
         yield return Result<CompletionDelta>.Ok(new CompletionDelta(string.Empty, "stop", new TokenUsage(100, 20)));
-    }
-
-    public async Task<Result<IReadOnlyList<string>>> ListModelsAsync(CancellationToken ct)
-    {
-        if (ListModelsDelay > TimeSpan.Zero)
-        {
-            await Task.Delay(ListModelsDelay, ct);
-        }
-
-        return Result<IReadOnlyList<string>>.Ok(["local/ministral-3-3b"]);
     }
 }

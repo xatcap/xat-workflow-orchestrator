@@ -45,7 +45,6 @@ public static class DependencyInjection
         services.AddSingleton<IXatRagEndpoint, XatRagEndpoint>();
         services.AddSingleton<IRetrievalProfiles, ConfigRetrievalProfiles>();
         services.AddSingleton<IModelCatalog, ConfigModelCatalog>();
-        services.AddSingleton<ITokenCounter, EstimatingTokenCounter>();
         services.AddSingleton<IPromptTemplateStore, FluidPromptTemplateStore>();
         services.AddSingleton<IPipelineCatalog, YamlPipelineCatalog>();
         services.AddSingleton<IRunStore, InMemoryRunStore>();
@@ -73,7 +72,12 @@ public static class DependencyInjection
     {
         services.AddOptions<UpstreamOptions>().Bind(configuration.GetSection(UpstreamOptions.SectionName)).ValidateOnStart();
         services.AddOptions<RetrievalOptions>().Bind(configuration.GetSection(RetrievalOptions.SectionName)).ValidateOnStart();
-        services.AddOptions<LlmOptions>().Bind(configuration.GetSection(LlmOptions.SectionName)).ValidateOnStart();
+
+        // A key that the code does not know stops the start. So a wrong or old key cannot stay in a file and do nothing.
+        services.AddOptions<LlmOptions>()
+            .Bind(configuration.GetSection(LlmOptions.SectionName), binder => binder.ErrorOnUnknownConfiguration = true)
+            .ValidateOnStart();
+
         services.AddOptions<PipelinesOptions>().Bind(configuration.GetSection(PipelinesOptions.SectionName));
         services.AddOptions<PromptsOptions>().Bind(configuration.GetSection(PromptsOptions.SectionName));
         services.AddOptions<RunnerOptions>().Bind(configuration.GetSection(RunnerOptions.SectionName)).ValidateOnStart();

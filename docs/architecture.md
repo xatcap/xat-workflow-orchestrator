@@ -2,7 +2,7 @@
 
 xat-workflow-orchestrator runs a pipeline for each request of a caller. A pipeline is a named list of steps. The steps are defined in YAML files. Some steps call xat-rag for retrieval, and some call xat-llm-engine for the LLM. The orchestrator returns the answer as one JSON body, or as server-sent events. A caller can also start a run in the background. The orchestrator then returns a run ID at once, and it can send the result to a webhook.
 
-The orchestrator also offers an OpenAI-compatible chat route. It forwards seven ingestion routes to xat-rag.
+The orchestrator also forwards seven ingestion routes to xat-rag. It does not offer chat completions, a model list or token counting. Those jobs belong to xat-llm-engine.
 
 This page explains the layers, the run lifecycle and the extension points. The [API reference](api.md) lists the routes and the settings. The [quickstart](quickstart.md) shows how to start the orchestrator.
 
@@ -12,7 +12,6 @@ This page explains the layers, the run lifecycle and the extension points. The [
 - [Ports and adapters](#ports-and-adapters)
 - [Run lifecycle](#run-lifecycle)
 - [Asynchronous runs and webhooks](#asynchronous-runs-and-webhooks)
-- [OpenAI-compatible facade](#openai-compatible-facade)
 - [Ingestion proxy](#ingestion-proxy)
 - [Pipeline model](#pipeline-model)
 - [Extensibility](#extensibility)
@@ -65,7 +64,7 @@ The architecture tests in `tests/Xat.Orchestrator.Architecture.Tests/` enforce t
 | Domain | `src/Xat.Orchestrator.Domain` | The result types and the error kinds. The pipeline definition, the run result, the retrieval chunks, the answer, the citations, the model profile, the run records and the webhook states. | The base class library only. |
 | Application | `src/Xat.Orchestrator.Application` | The pipeline engine, the step interfaces, the built-in steps, the ports, the definition validator, the input schema validator and the asynchronous run service. The port `IXatRagEndpoint` gives the address of xat-rag. | The Domain layer. Not the Infrastructure or Api layers, not ASP.NET Core, and not the YAML, template or resilience libraries. |
 | Infrastructure | `src/Xat.Orchestrator.Infrastructure` | The adapters to xat-rag and xat-llm-engine. The class `XatRagEndpoint` implements the address port for xat-rag. The YAML reader, the template store, the configuration catalogs, the health checks, the settings and their validators. The in-memory run store and the webhook adapters. | The Application and Domain layers, and the third-party libraries for YAML, templates and resilience. |
-| Api | `src/Xat.Orchestrator.Api` | The routes, the request and response types, the error mapping, the admission control, the listen address check, the program start, the background workers for runs and the webhook payload writer. It also holds the OpenAI-compatible facade and the ingestion proxy. The proxy uses YARP, a reverse proxy library. | The Application layer, ASP.NET Core, the YARP library, and the Infrastructure layer for the start code. |
+| Api | `src/Xat.Orchestrator.Api` | The routes, the request and response types, the error mapping, the admission control, the listen address check, the program start, the background workers for runs and the webhook payload writer. It also holds the ingestion proxy. The proxy uses YARP, a reverse proxy library. | The Application layer, ASP.NET Core, the YARP library, and the Infrastructure layer for the start code. |
 
 The Domain layer returns expected failures as values. The type `Result` and the type `PipelineError` carry the code, the message, the kind and the retry time. An exception means a bug.
 
@@ -75,11 +74,10 @@ The repository has these main folders:
 
 - `src/Xat.Orchestrator.Api/`
   - `Program.cs` starts the host. It registers the services, the admission control and the routes. It also runs the fail-fast checks.
-  - `Endpoints/` has the route groups: `CatalogEndpoints.cs`, `HealthEndpoints.cs`, `RunEndpoints.cs` and `RunStatusEndpoints.cs`. `RunRules.cs` holds the rules that the run routes and the OpenAI-compatible route share, such as the rate limit policy name and the stream mode check.
+  - `Endpoints/` has the route groups: `CatalogEndpoints.cs`, `HealthEndpoints.cs`, `RunEndpoints.cs` and `RunStatusEndpoints.cs`. `RunRules.cs` holds the rules that the run routes share, such as the rate limit policy name and the stream mode check.
   - `AsyncRunWorker.cs` starts the run workers and the webhook delivery workers. `WebhookPayloadWriter.cs` writes the webhook body.
   - `Contracts/` has the JSON settings and the request and response types.
   - `ApiErrors.cs`, `GlobalExceptionHandler.cs`, `ListenAddressPolicy.cs` and `ApiOptions.cs` hold the error mapping, the unhandled exception handler, the loopback check and the API settings. `BrowserOriginGuard.cs` refuses every request that has an `Origin` header.
-  - `OpenAi/` holds the OpenAI-compatible facade. `ChatCompletionsEndpoint.cs` has the route. `ChatCompletionRequestReader.cs` maps the request to a pipeline input. `ChatCompletionJson.cs` builds the response bodies. `ChatCompletionCall.cs` is the mapped call.
   - `Ingestion/` holds the ingestion proxy. `IngestionEndpoints.cs` maps the seven routes, and `IngestionRoutes.cs` holds their names. `IngestionForwarder.cs` sends the request, and `IngestionTransformer.cs` lets only the allowed headers through. `IngestionRawPath.cs` builds the path of a delete-document request. `IngestionOptions.cs` holds the settings.
   - `appsettings.json` holds the default settings.
 - `src/Xat.Orchestrator.Application/`
@@ -92,7 +90,7 @@ The repository has these main folders:
 - `src/Xat.Orchestrator.Domain/`
   - `Errors/`, `Generation/`, `Pipelines/`, `Retrieval/` and `Runs/` hold the types of each area.
 - `src/Xat.Orchestrator.Infrastructure/`
-  - `Catalogs/` has the model catalog, the retrieval profile catalog and the token counter.
+  - `Catalogs/` has the model catalog and the retrieval profile catalog.
   - `Definitions/` has the pipeline catalog and the YAML reader.
   - `Discovery/` has the upstream address logic, the address handler and the error mapping for the upstream services.
   - `Health/` has the health checks of the upstream services.
@@ -111,13 +109,12 @@ The Application layer defines the ports as interfaces in `src/Xat.Orchestrator.A
 
 | Port | Adapter | Source or service | Notes |
 |---|---|---|---|
-| `IRetrievalClient` | `XatRagRetrievalClient` | xat-rag: `POST /v1/context` and `GET /v1/rags` | The text of each chunk is wrapped in `UntrustedText`. |
-| `ILlmClient` | `XatEngineLlmClient` | xat-llm-engine: `POST /v1/chat/completions` and `GET /v1/models` | The adapter writes the request by hand. It sends only the fields in `AllowedFields`. |
+| `IRetrievalClient` | `XatRagRetrievalClient` | xat-rag: `POST /v1/context` | The text of each chunk is wrapped in `UntrustedText`. |
+| `ILlmClient` | `XatEngineLlmClient` | xat-llm-engine: `POST /v1/chat/completions` | The adapter writes the request by hand. It sends only the fields in `AllowedFields`. |
 | `IModelCatalog` | `ConfigModelCatalog` | The `Llm` settings | Model aliases. |
 | `IRetrievalProfiles` | `ConfigRetrievalProfiles` | The `Retrieval` settings | Retrieval aliases. |
 | `IPipelineCatalog` | `YamlPipelineCatalog` | The `Pipelines:Folder` folder | All files are read and checked at start. |
 | `IPromptTemplateStore` | `FluidPromptTemplateStore` | The `Prompts:Folder` folder | Templates are parsed at start. |
-| `ITokenCounter` | `EstimatingTokenCounter` | None | Three characters for each token. See [Known limits](#known-limits). |
 | `IRunEventSink` | `ChannelRunEventSink` and `NullRunEventSink` | An in-process channel | A streamed run uses the channel. A sync run uses the null sink. |
 | `IStepRegistry` | `StepRegistry` | The step registrations of the service collection | Step types by name. |
 | `IRunStore` | `InMemoryRunStore` | None. The store is in memory. | Records of asynchronous runs. A restart loses them. |
@@ -298,48 +295,6 @@ The store runs each change under one lock. A cancel and a worker that starts the
 
 When a run ends, the service puts it in a delivery queue. Delivery workers send the webhook. They do not hold a run worker, so a slow receiver does not block the runs.
 
-## OpenAI-compatible facade
-
-The route `POST /v1/chat/completions` translates an OpenAI chat request into a pipeline run. The translation is protocol work, so it lives in the Api layer. The route then runs the same engine as the other run routes. The caller sees the API described in [OpenAI-compatible API](api.md#openai-compatible-api).
-
-The facade has these parts, all in the Api layer:
-
-- `ChatCompletionRequestReader` maps the messages to the input of the pipeline. It also checks the model name and the refused fields.
-- `ChatCompletionsEndpoint` starts the run with `PipelineRunner`. It writes the answer, or the stream.
-- `ChatCompletionJson` builds the OpenAI bodies and the `xat` object.
-
-The facade has no port. It uses the same run limit as the other run routes, so `Api:MaxConcurrentRuns` and `Api:QueueLimit` apply to it too. A disconnect of the caller cancels the run, as in the other run routes.
-
-A streamed chat request follows this sequence:
-
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant Facade as Api facade
-    participant Runner as PipelineRunner
-    participant Llm as llm.generate
-    participant LlmAdapter as XatEngineLlmClient
-    participant Engine as xat-llm-engine
-
-    Caller->>Facade: POST /v1/chat/completions with stream true
-    Facade->>Facade: Map the last user message to prompt and the system messages to system_prompt
-    Facade->>Runner: Start the run with a stream
-    Runner->>Llm: Run llm.generate
-    Llm->>LlmAdapter: Stream the chat
-    LlmAdapter->>Engine: POST /v1/chat/completions with stream true
-    Engine-->>LlmAdapter: First data chunk
-    LlmAdapter-->>Llm: First text part
-    Llm-->>Runner: Delta event
-    Runner-->>Facade: Delta event
-    Facade-->>Caller: 200 with the role piece, then the text piece
-    Engine-->>LlmAdapter: More data chunks
-    LlmAdapter-->>Llm: More text parts
-    Runner-->>Facade: Completed event
-    Facade-->>Caller: Finish piece with the xat object, usage piece if asked, then the end marker
-```
-
-The route sends the status 200 with the first piece. It waits for that piece, as xat-llm-engine does. An error before this piece is a normal HTTP error. An error after it is one event with the error body, and the stream has no end marker. A step that ends the run without streaming sends its text as one piece. If the event channel closes with no last event, the route sends the error `run.stream_lost`. It has the status 500.
-
 ## Ingestion proxy
 
 The ingestion proxy forwards seven routes of xat-rag. The routes are listed in [Route names and paths](api.md#route-names-and-paths). The proxy uses YARP, a reverse proxy library. The library class `IHttpForwarder` sends each request. Each request has its own destination, because the address of xat-rag can change at each start.
@@ -442,7 +397,7 @@ Each hook call has a time limit of 5 seconds. A hook that fails or passes its li
 
 A streamed run uses a bounded channel with 256 places. The channel has one reader and one writer. When the channel is full, the runner waits for the reader.
 
-The runner sends these events: `Started`, `StepStarted`, `Delta`, `Citations`, `Completed` and `Failed`. The last event is always `Completed` or `Failed`. The runner waits at most 5 seconds to send the last event. After that, the run ends without sending it. The OpenAI-compatible route then sends the error `run.stream_lost`. See [OpenAI-compatible facade](#openai-compatible-facade).
+The runner sends these events: `Started`, `StepStarted`, `Delta`, `Citations`, `Completed` and `Failed`. The last event is always `Completed` or `Failed`. The runner waits at most 5 seconds to send the last event. After that, the run ends without sending it. The streamed run route then sends the error `run.stream_lost`.
 
 ### Cancellation and time limits
 
@@ -481,7 +436,7 @@ A model is a model alias for xat-llm-engine.
 1. Add the alias under `Llm:Models` in `src/Xat.Orchestrator.Api/appsettings.json`.
 2. Restart the orchestrator.
 
-No code change is needed for a model that uses the fields that the adapter already sends. To send a new field, add it to `BuildRequest` in `src/Xat.Orchestrator.Infrastructure/XatLlmEngine/XatEngineLlmClient.cs`, and list the field in `AllowedFields` of the model. A new tokenizer needs a new `ITokenCounter` adapter. The validator in `src/Xat.Orchestrator.Infrastructure/Options/LlmOptionsValidator.cs` accepts only `estimate` today.
+No code change is needed for a model that uses the fields that the adapter already sends. To send a new field, add it to `BuildRequest` in `src/Xat.Orchestrator.Infrastructure/XatLlmEngine/XatEngineLlmClient.cs`, and list the field in `AllowedFields` of the model.
 
 ### Add a middleware
 
@@ -526,15 +481,14 @@ The kind decides the HTTP status and the `type` of the error body:
 | `Cancelled` | 499 | `cancelled_error` |
 | `Internal` | 500 | `internal_error` |
 
-The Api layer writes every error with the same body: `{"error": {"type", "message", "code", "run_id"}}`. The class `ApiErrors` writes the body. The OpenAI-compatible facade writes its own body, `{"error": {"message", "type", "param", "code"}}`. The Origin refusal uses the standard body on this route too. The status and the `Retry-After` rules are the same for both bodies. The ingestion proxy uses the standard body for its own errors. It passes the answer of xat-rag as it is.
+The Api layer writes every error with the same body: `{"error": {"type", "message", "code", "run_id"}}`. The class `ApiErrors` writes the body. The ingestion proxy uses the standard body for its own errors. It passes the answer of xat-rag as it is.
 
 Each part of the system creates errors in its own place:
 
-- Steps create validation errors and internal errors. For example, `prompt.too_large` is a validation error.
+- Steps create validation errors and internal errors. For example, `prompt.no_user` is a validation error.
 - The adapters map the errors of the upstream services. The upstream type and status do not leave the adapter. See the table in [Errors](api.md#errors).
 - The runner creates the timeout, the cancel and the internal errors of a run.
 - The Api layer creates the errors of the request, such as `request.content_type`. It also answers 403 for a request with an `Origin` header, and 413 for a body above the limit. Both have the type `invalid_request_error`.
-- The facade creates its own request errors, such as `request.model_invalid`, `model.not_found` and `stream.not_supported`. See [OpenAI-compatible errors](api.md#openai-compatible-errors).
 - The ingestion proxy creates `ingestion.route_disabled`, `ingestion.route_not_found`, `request.too_large` for an upload, and the `xat-rag.` errors of the proxy.
 - The asynchronous run service creates `jobs.queue_full` and `run.not_found`. It also creates `input.invalid` at submit. The webhook policy creates the `webhook.` errors.
 - The `GlobalExceptionHandler` catches the unexpected exceptions. It logs the exception, and it returns `internal.error` with no details.
@@ -549,7 +503,7 @@ These rules protect the orchestrator for now:
 
 - **Loopback only.** The orchestrator refuses to start when a listen address is not loopback. The check covers the `urls` setting, the `--urls` option, `ASPNETCORE_URLS` and `Kestrel:Endpoints`. A second check runs when the server starts. It stops the server when the server binds to another address.
 - **Upstream loopback only.** The upstream services also have no authentication. The adapters accept only loopback `http` addresses. The start rejects a `BaseUrl` that is not loopback. The locator refuses a ready file that names a non-loopback address.
-- **Shared machine.** Any program on the same machine can call every route. This includes the run routes, the asynchronous run routes, the catalog routes, the OpenAI-compatible route and the ingestion routes. A program on the same machine can read and cancel every asynchronous run. A program on another machine cannot reach the orchestrator.
+- **Shared machine.** Any program on the same machine can call every route. This includes the run routes, the asynchronous run routes, the catalog routes and the ingestion routes. A program on the same machine can read and cancel every asynchronous run. A program on another machine cannot reach the orchestrator.
 - **Ingestion routes.** The ingestion proxy has no authentication, by decision of the project owner. Any program on the same machine can upload documents, delete documents and rebuild a RAG. The routes `delete-document` and `rebuild-rag` are on by default. An operator turns a route off with `Ingestion:DisabledRoutes`. A program on the same machine can still call xat-rag directly.
 - **Content type.** A POST body must have the content type `application/json`. A web form cannot send that type. So a cross-site form post is refused.
 - **Browser requests.** The orchestrator refuses every request that has an `Origin` header, with 403 `request.origin_not_allowed`. A browser adds this header to a request from a web page. So a web page cannot call the orchestrator, even with a request that needs no preflight. Programs such as `curl` send no `Origin` header, so they are not affected.
@@ -558,7 +512,7 @@ These rules protect the orchestrator for now:
 - **Admission control.** It limits the work that reaches the upstream services. It is not authorization.
 - **Webhook addresses.** The orchestrator sends webhooks only to loopback hosts and to the hosts in `Webhooks:AllowedHosts`. This rule limits where requests go. It is not authentication. Webhooks have no signature, so a receiver cannot prove that the orchestrator sent one.
 
-Text from documents and from the caller is untrusted. The prompt assembly step handles it in these ways:
+Text from documents and the text of `prompt.context` steps is untrusted. The prompt assembly step handles it in these ways. The prompt of the caller is the user message, and the step does not escape it.
 
 - It escapes the characters `&`, `<` and `>`, so that the text cannot close a tag or open a fake tag.
 - It puts each chunk in a `<source>` tag, with its number, its title and its heading.
@@ -569,8 +523,6 @@ Text from documents and from the caller is untrusted. The prompt assembly step h
 Trusted text is different. The text of `prompt.append` and the output of a template are trusted. The assemble step does not escape them. For this reason, never put text from the caller in a trusted part. Use an enum in the input schema, as the `language` input of `custom-prompt` does.
 
 The `system_prompt` input of `rag-qa`, `chat` and `custom-prompt` sets the system prompt. The assemble step does not escape this text. Programs on the same machine can send it. This is a known exposure while the orchestrator has no authentication.
-
-The OpenAI-compatible route sends the system and developer messages to the same input, so the same exposure applies. The route does not check or escape these messages.
 
 Other protections are these:
 
@@ -592,7 +544,8 @@ Each row names a decision and its reason.
 | Loopback only. | Without authentication, a network address would let every machine on the network call the orchestrator. |
 | Fluid for the prompt templates. | Fluid gives no access to .NET objects, so an edited template cannot run code. |
 | An own JSON Schema subset validator. | JsonSchema.Net now needs a paid maintenance agreement. The subset covers the input checks of the pipelines. The start rejects any other keyword. |
-| Estimate-based token counting. | The engine has no tokenize route, so the orchestrator cannot count tokens exactly. The estimate is high, so prompts stay inside the context window. |
+| The orchestrator calls xat-llm-engine and xat-rag. It does not offer chat completions, a model list or token counting. | Those jobs belong to xat-llm-engine. The engine decides the prompt size limits. |
+| An unknown key under `Llm` stops the start. | A wrong or old key must not stay in a file and do nothing. The error names the key. |
 | One top-level type for each file. | A file name shows where to find a type. |
 | Plain handlers and no mediator library. | The MediatR license has changed. Plain handler classes need no library. |
 | An in-memory run store. | The project owner decided this. A restart loses the runs. |
@@ -606,11 +559,6 @@ Each row names a decision and its reason.
 | Each run change is one atomic store update. | A cancel cannot get lost when a worker starts the same run at the same time. |
 | The stored webhook address has no path and no query. | A path or a query can hold a secret. |
 | No signature on webhooks. | The project owner decided this. |
-| The OpenAI-compatible route translates the protocol in the Api layer, and it runs the same engine. | The engine stays the only code that runs steps. The route changes only the request and the answer. |
-| A pipeline is callable through the route when it has the input `prompt`. | A chat request has one prompt. A pipeline without that input cannot use the request. |
-| Earlier turns are not used, and the answer says so. | The pipelines take one prompt. A note in `warnings` tells the caller what the route did not use. |
-| The `xat` extension carries what the OpenAI format has no place for. | The run ID, the status, the citations and the notes need a place in the answer. |
-| The stream sends the status 200 when the first piece is ready, as in xat-llm-engine. | An error before the first piece can still set the HTTP status. |
 | YARP `IHttpForwarder`, with a destination for each request. | The address of xat-rag can change at each start, so each request reads it again. |
 | A fixed list of seven ingestion routes. | Only the routes that the orchestrator needs are reachable. Another path of xat-rag never gets a request. |
 | The proxy sends only an allow-list of request headers, and it sets `Host`. The framework adds the trace headers. | A list of allowed names is safer than a list of removed names. The credentials and cookies of another system must not reach xat-rag. |
@@ -623,14 +571,13 @@ Each row names a decision and its reason.
 
 ## Known limits
 
-- **Token counts are estimates.** The orchestrator counts 3 characters as 1 token. It has no tokenizer for the model. The `size_tokens` value of xat-rag is not a count of model tokens.
+- **No prompt size limit in the orchestrator.** The assemble step sends every chunk. The size depends on the `Chunks` value of the retrieval profile and on xat-llm-engine.
 - **No idle timeout for a stream.** A caller that stops reading keeps the connection open until the caller closes it.
-- **Catalog routes call the upstream services.** `GET /v1/contexts` and `GET /v1/models` call xat-rag and xat-llm-engine on each request. Each call has a time limit of 2 seconds. A slow upstream gives an unknown `available` value. These routes are outside the rate limiter. The rate limiter covers only the run routes and the OpenAI-compatible route. The ingestion routes are outside the rate limiter too.
+- **The rate limiter covers only the run routes.** The catalog routes and the ingestion routes are outside the rate limiter.
 - **Health checks call the upstream services.** Each check has a time limit of 3 seconds.
 - **Fail-fast start.** All pipeline files, templates and settings are read at start. A file with a mistake stops the start. The orchestrator does not reload them while it runs.
 - **The pipeline list changes only after a restart.** A new or changed pipeline file needs a restart.
 - **`Parallel` is not enforced.** The orchestrator stores the value of `Llm:Models:<alias>:Parallel`. The limit on runs at the same time is `Api:MaxConcurrentRuns`.
-- **No grammar is sent.** The `SupportsGrammar` value only shows in `GET /v1/models`.
 - **Runs are lost on a stop.** The store is in memory. Stopping the orchestrator removes all queued, running and finished runs.
 - **Retention can remove a result early.** A finished run leaves the store after `Jobs:RetentionMinutes`, or when there are more finished runs than `Jobs:RetainFinished`. A caller must read the result in time.
 - **Webhooks are sent at least once.** A receiver can get the same webhook more than once. It must use the `X-Run-Id` header to ignore a repeat.
@@ -639,9 +586,6 @@ Each row names a decision and its reason.
 - **No long poll.** A caller reads `GET /v1/runs/{id}` again and again to see the final state.
 - **A cancelled run keeps its queue place.** A cancelled run that waits takes a place in the queue until a worker reads it.
 - **The host rule checks the host name only.** An allowed host name can resolve to any address.
-- **The OpenAI-compatible route uses only the last user message.** Earlier turns are not used. The `warnings` field of the answer says so.
-- **The OpenAI-compatible route has no tools and no structured output.** A request with `tools`, or with a `response_format` of another type, gets 400.
-- **Usage is the sum over the run.** The `usage` value of the OpenAI-compatible route is not the usage of one model call.
 - **The proxy does not check the content of an upload.** xat-rag checks the content.
 - **The ingestion proxy adds no authentication.** Any program on the same machine can call the ingestion routes.
 
@@ -650,7 +594,6 @@ Each row names a decision and its reason.
 These features are planned. The current release does not have them, so do not use them:
 
 - Authentication. The owner will ask for it later.
-- Structured output, with a step named `llm.structured`.
 - Session memory.
 - Caches.
 - A fallback model.

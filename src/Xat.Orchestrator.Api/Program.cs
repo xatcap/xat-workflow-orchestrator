@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Api;
 using Xat.Orchestrator.Api.Endpoints;
 using Xat.Orchestrator.Api.Ingestion;
-using Xat.Orchestrator.Api.OpenAi;
 using Xat.Orchestrator.Application;
 using Xat.Orchestrator.Application.Abstractions;
 using Xat.Orchestrator.Domain.Errors;
@@ -12,7 +11,7 @@ using Xat.Orchestrator.Infrastructure;
 using Xat.Orchestrator.Infrastructure.Definitions;
 
 // The content root is the folder of the program, not the current folder.
-// So the program finds appsettings.json, the pipeline files and the prompt templates from any folder.
+// So the program finds appsettings.json from any folder. This setting wins over --contentRoot and ASPNETCORE_CONTENTROOT.
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
@@ -128,7 +127,6 @@ app.MapCatalogEndpoints();
 app.MapRunEndpoints();
 app.MapRunStatusEndpoints();
 app.MapIngestionEndpoints();
-app.MapChatCompletionsEndpoint();
 
 await app.RunAsync();
 

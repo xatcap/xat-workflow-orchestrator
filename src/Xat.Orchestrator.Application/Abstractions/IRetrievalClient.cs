@@ -11,9 +11,4 @@ public interface IRetrievalClient
     /// <param name="ct">The token that cancels the call.</param>
     /// <returns>The chunks, or the error.</returns>
     Task<Result<RetrievedSet>> RetrieveAsync(RetrievalQuery query, CancellationToken ct);
-
-    /// <summary>Lists the contexts and RAGs of xat-rag.</summary>
-    /// <param name="ct">The token that cancels the call.</param>
-    /// <returns>The catalog, or the error.</returns>
-    Task<Result<RetrievalCatalog>> GetCatalogAsync(CancellationToken ct);
 }

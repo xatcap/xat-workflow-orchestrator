@@ -42,8 +42,6 @@ steps:
       text: The sources hold no information for this question.
   - id: assemble
     uses: prompt.assemble
-    with:
-      reserveOutput: 800
   - id: generate
     uses: llm.generate
     with:

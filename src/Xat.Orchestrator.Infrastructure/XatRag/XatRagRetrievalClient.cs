@@ -8,7 +8,7 @@ using Xat.Orchestrator.Infrastructure.Discovery;
 namespace Xat.Orchestrator.Infrastructure.XatRag;
 
 /// <summary>
-/// The adapter to xat-rag. It calls <c>POST /v1/context</c> and <c>GET /v1/rags</c>, and it turns the answers into domain types.
+/// The adapter to xat-rag. It calls <c>POST /v1/context</c>, and it turns the answers into domain types.
 /// The chunk text goes into <see cref="UntrustedText"/>, because the text of a document can hold instructions that an attacker wrote.
 /// </summary>
 internal sealed class XatRagRetrievalClient(HttpClient http) : IRetrievalClient
@@ -49,28 +49,6 @@ internal sealed class XatRagRetrievalClient(HttpClient http) : IRetrievalClient
         }
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<RetrievalCatalog>> GetCatalogAsync(CancellationToken ct)
-    {
-        try
-        {
-            using var response = await http.GetAsync("/v1/rags", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return Result<RetrievalCatalog>.Fail(await UpstreamErrors.FromResponseAsync(response, Name, ct));
-            }
-
-            var body = await response.Content.ReadFromJsonAsync<CatalogResponse>(_json, ct);
-            var contexts = body?.Contexts ?? [];
-            var rags = (body?.Rags ?? []).Select(rag => rag.Name).ToList();
-            return Result<RetrievalCatalog>.Ok(new RetrievalCatalog(contexts, rags));
-        }
-        catch (Exception exception) when (UpstreamErrors.TryMap(exception, Name, ct, out var error))
-        {
-            return Result<RetrievalCatalog>.Fail(error);
-        }
-    }
-
     private static Chunk ToDomain(ChunkDto chunk) =>
         new(
             chunk.ChunkId,
@@ -96,8 +74,4 @@ internal sealed class XatRagRetrievalClient(HttpClient http) : IRetrievalClient
     private sealed record SourceDto(string? Rag, string? DocId, string? SourceKind, string? Uri, string? Title, string? Version);
 
     private sealed record OmittedDto(string? ChunkId, string? Reason);
-
-    private sealed record CatalogResponse(IReadOnlyList<RagDto>? Rags, IReadOnlyList<string>? Contexts);
-
-    private sealed record RagDto(string Name);
 }

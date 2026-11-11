@@ -41,7 +41,7 @@ public static class DependencyInjection
             .AddPipelineStep<FlowCompleteIfStep, FlowCompleteIfOptions>(
                 "flow.complete-if", StepTraits.ProducesAnswer, "Ends the run with a fixed answer when a condition is true.")
             .AddPipelineStep<PromptAssembleStep, PromptAssembleOptions>(
-                "prompt.assemble", StepTraits.None, "Builds the chat messages and fits them into the token budget.")
+                "prompt.assemble", StepTraits.None, "Builds the chat messages from the prompt parts and numbers the sources.")
             .AddPipelineStep<LlmGenerateStep, LlmGenerateOptions>(
                 "llm.generate",
                 StepTraits.CallsLlm | StepTraits.Streams | StepTraits.ProducesAnswer,

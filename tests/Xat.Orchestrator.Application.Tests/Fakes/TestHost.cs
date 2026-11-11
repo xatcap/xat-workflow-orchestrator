@@ -18,7 +18,6 @@ internal static class TestHost
     public static ServiceProvider Build(
         FakeRetrievalClient? rag = null,
         FakeLlmClient? llm = null,
-        int contextWindow = 8192,
         Action<IServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
@@ -26,10 +25,9 @@ internal static class TestHost
         services.AddApplication();
         services.AddSingleton<IRetrievalClient>(rag ?? new FakeRetrievalClient());
         services.AddSingleton<ILlmClient>(llm ?? new FakeLlmClient());
-        services.AddSingleton<IModelCatalog>(new StubModelCatalog(contextWindow));
+        services.AddSingleton<IModelCatalog>(new StubModelCatalog());
         services.AddSingleton<IRetrievalProfiles, StubProfiles>();
         services.AddSingleton<IPromptTemplateStore, StubTemplates>();
-        services.AddSingleton<ITokenCounter, StubTokenCounter>();
         services.Configure<RunnerOptions>(options => options.RunTimeout = TimeSpan.FromSeconds(30));
         configure?.Invoke(services);
         return services.BuildServiceProvider();

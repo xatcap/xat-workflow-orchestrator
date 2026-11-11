@@ -10,11 +10,10 @@ public class BrowserOriginGuardTests
     [InlineData("GET", "/v1/pipelines")]
     [InlineData("GET", "/health/live")]
     [InlineData("POST", "/v1/pipelines/chat/runs")]
-    [InlineData("POST", "/v1/chat/completions")]
     [InlineData("POST", "/v1/rags/docs/rebuild")]
     [InlineData("PUT", "/v1/rags/docs/documents")]
     [InlineData("DELETE", "/v1/runs/run_1")]
-    [InlineData("OPTIONS", "/v1/chat/completions")]
+    [InlineData("OPTIONS", "/v1/pipelines")]
     public async Task RequestWithOrigin_Gets403(string method, string path)
     {
         var llm = new FakeLlmClient();
@@ -59,23 +58,5 @@ public class BrowserOriginGuardTests
         using var response = await client.GetAsync("/v1/pipelines", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    /// <summary>The model list answers fast when the engine hangs. The field available is then unknown, and the OpenAI list fields are complete.</summary>
-    [Fact]
-    public async Task ModelList_DoesNotWaitForAHangingEngine()
-    {
-        var llm = new FakeLlmClient { ListModelsDelay = TimeSpan.FromSeconds(30) };
-        await using var factory = ApiHost.Create(llm: llm);
-        using var client = factory.CreateClient();
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-
-        using var response = await client.GetAsync("/v1/models", TestContext.Current.CancellationToken);
-        var body = await ApiHost.ReadJsonAsync(response);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"The route took {watch.Elapsed}.");
-        Assert.Equal(4, body.GetProperty("data").GetArrayLength());
-        Assert.Equal(System.Text.Json.JsonValueKind.Null, body.GetProperty("models")[0].GetProperty("available").ValueKind);
     }
 }

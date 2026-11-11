@@ -62,7 +62,6 @@ steps:
   - id: assemble
     uses: prompt.assemble
     with:
-      reserveOutput: 800
       order: [caller-context, kb, extra]
   - id: generate
     uses: llm.generate

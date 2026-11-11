@@ -46,18 +46,6 @@ internal static class ApiErrors
         return http.Response.WriteAsJsonAsync(ToEnvelope(error, runId), ApiJson.Options, "application/json", ct);
     }
 
-    /// <summary>Writes an error response in the OpenAI form <c>{"error":{"message","type","param","code"}}</c>. The status and the <c>Retry-After</c> rules are the same as for <see cref="WriteAsync"/>.</summary>
-    /// <param name="http">The HTTP context.</param>
-    /// <param name="error">The error.</param>
-    /// <param name="ct">The token that cancels the write.</param>
-    /// <returns>A task that completes when the response is written.</returns>
-    public static Task WriteOpenAiAsync(HttpContext http, PipelineError error, CancellationToken ct)
-    {
-        ApplyStatus(http, error, null);
-        http.Response.ContentType = "application/json";
-        return http.Response.WriteAsync(OpenAi.ChatCompletionJson.Error(error).ToJsonString(), System.Text.Encoding.UTF8, ct);
-    }
-
     private static void ApplyStatus(HttpContext http, PipelineError error, int? statusOverride)
     {
         var status = statusOverride ?? Describe(error.Kind).Status;

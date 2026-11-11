@@ -3,7 +3,7 @@ using Xat.Orchestrator.Domain.Pipelines;
 
 namespace Xat.Orchestrator.Api.Endpoints;
 
-/// <summary>Rules that the run routes and the OpenAI route share.</summary>
+/// <summary>Rules that the run routes share.</summary>
 internal static class RunRules
 {
     /// <summary>The name of the rate limit policy for runs.</summary>

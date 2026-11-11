@@ -44,7 +44,7 @@ internal static class TestData
                 Step("user", "prompt.user", """{"text":"${input.prompt}"}"""),
                 Step("retrieve", "rag.retrieve", $$"""{"profile":"{{profile}}"}"""),
                 Step("none", "flow.complete-if", """{"key":"steps.retrieve.chunks","isEmpty":true,"text":"No sources."}"""),
-                Step("assemble", "prompt.assemble", """{"reserveOutput":800}"""),
+                Step("assemble", "prompt.assemble"),
                 Step("generate", "llm.generate"),
                 Step("cite", "answer.verify-citations"),
             ],

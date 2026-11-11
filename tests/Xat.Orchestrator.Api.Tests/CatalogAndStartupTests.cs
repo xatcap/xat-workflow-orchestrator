@@ -52,9 +52,9 @@ public class CatalogAndStartupTests
         Assert.Contains("CallsLlm", llm.GetProperty("traits").EnumerateArray().Select(t => t.GetString()));
     }
 
-    /// <summary>The contexts route shows each alias and whether xat-rag lists its context.</summary>
+    /// <summary>The contexts route shows each retrieval alias with its xat-rag context and its number of chunks.</summary>
     [Fact]
-    public async Task Contexts_ShowAvailability()
+    public async Task Contexts_ShowTheAliases()
     {
         await using var factory = ApiHost.Create();
         using var client = factory.CreateClient();
@@ -62,24 +62,8 @@ public class CatalogAndStartupTests
         var body = await ApiHost.ReadJsonAsync(await client.GetAsync("/v1/contexts", TestContext.Current.CancellationToken));
 
         var byAlias = body.GetProperty("contexts").EnumerateArray().ToDictionary(c => c.GetProperty("alias").GetString()!, c => c);
-        Assert.True(byAlias["default"].GetProperty("available").GetBoolean());
-        Assert.True(byAlias["docs"].GetProperty("available").GetBoolean());
-        Assert.False(byAlias["jira"].GetProperty("available").GetBoolean());
-    }
-
-    /// <summary>The models route shows each alias and whether the engine lists its model.</summary>
-    [Fact]
-    public async Task Models_ShowAvailability()
-    {
-        await using var factory = ApiHost.Create();
-        using var client = factory.CreateClient();
-
-        var body = await ApiHost.ReadJsonAsync(await client.GetAsync("/v1/models", TestContext.Current.CancellationToken));
-
-        Assert.Equal("default", body.GetProperty("default_model").GetString());
-        var model = body.GetProperty("models")[0];
-        Assert.Equal("local/ministral-3-3b", model.GetProperty("model").GetString());
-        Assert.True(model.GetProperty("available").GetBoolean());
+        Assert.Equal("ask-docs", byAlias["docs"].GetProperty("context").GetString());
+        Assert.True(byAlias["docs"].GetProperty("chunks").GetInt32() > 0);
     }
 
     /// <summary>When the upstream services are down, ready says degraded, with status 200, because the orchestrator itself runs.</summary>
@@ -136,10 +120,10 @@ public class CatalogAndStartupTests
         await using var factory = ApiHost.Create();
         using var client = factory.CreateClient();
 
-        var text = await (await client.GetAsync("/v1/models", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var text = await (await client.GetAsync("/v1/pipelines", TestContext.Current.CancellationToken)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         using var document = JsonDocument.Parse(text);
-        Assert.True(document.RootElement.TryGetProperty("default_model", out _));
-        Assert.DoesNotContain("defaultModel", text, StringComparison.Ordinal);
+        Assert.True(document.RootElement.GetProperty("pipelines")[0].TryGetProperty("input_schema", out _));
+        Assert.DoesNotContain("inputSchema", text, StringComparison.Ordinal);
     }
 }

@@ -13,13 +13,11 @@ using Xat.Orchestrator.Domain.Retrieval;
 namespace Xat.Orchestrator.Application.Tests.Fakes;
 
 /// <summary>A fixed model catalog with one model.</summary>
-internal sealed class StubModelCatalog(int contextWindow = 8192) : IModelCatalog
+internal sealed class StubModelCatalog : IModelCatalog
 {
-    private readonly ModelProfile _model = new("default", "local/test-model", contextWindow, "estimate", 1, true, ["temperature", "max_tokens"]);
+    private readonly ModelProfile _model = new("default", "local/test-model", 1, ["temperature", "max_tokens"]);
 
     public string DefaultAlias => "default";
-
-    public IReadOnlyCollection<ModelProfile> All => [_model];
 
     public Result<ModelProfile> Resolve(string? modelAlias) =>
         string.IsNullOrWhiteSpace(modelAlias) || modelAlias == "default"

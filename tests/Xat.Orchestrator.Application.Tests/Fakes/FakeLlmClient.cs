@@ -52,7 +52,4 @@ internal sealed class FakeLlmClient : ILlmClient
 
         yield return Result<CompletionDelta>.Ok(new CompletionDelta(string.Empty, "stop", new TokenUsage(100, 20)));
     }
-
-    public Task<Result<IReadOnlyList<string>>> ListModelsAsync(CancellationToken ct) =>
-        Task.FromResult(Result<IReadOnlyList<string>>.Ok(["local/test-model"]));
 }

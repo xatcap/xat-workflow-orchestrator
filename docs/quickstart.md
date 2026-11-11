@@ -8,7 +8,7 @@ The commands run in a POSIX shell. Run them from the root of the repository, unl
 
 - To build from source, install the .NET SDK 10.0.401. The file `global.json` pins this version and disables roll-forward. Check the version with `dotnet --version`. The output must be `10.0.401`. A release does not need the .NET SDK.
 - xat-rag and xat-llm-engine, each running on a loopback address. Read the documentation of each service to start it.
-- Python 3, for the example receiver in [Run in the background](#run-in-the-background) and for the example in [Call the route with the OpenAI Python library](#call-the-route-with-the-openai-python-library).
+- Python 3, for the example receiver in [Run in the background](#run-in-the-background).
 
 If the SDK is installed in `~/.dotnet`, add it to the path before you run `dotnet`:
 
@@ -50,7 +50,7 @@ Each release has one archive for each platform. The archive holds the program, t
     ./Xat.Orchestrator.Api
     ```
 
-   On Windows, run `Xat.Orchestrator.Api.exe`. The program reads `appsettings.json`, `pipelines/` and `prompts/` from its own folder. You can start it from any current folder.
+   On Windows, run `Xat.Orchestrator.Api.exe`. The program reads `appsettings.json`, `pipelines/` and `prompts/` from its own folder. You can start it from any current folder. A relative `ReadyFile` path is the exception, because it starts at the current folder.
 
    The output shows the listen address when the start succeeds:
 
@@ -239,62 +239,6 @@ An asynchronous run returns a run ID at once. The orchestrator then sends the re
 
 To stop the receiver, press Ctrl+C in its terminal.
 
-## Call a pipeline with the OpenAI format
-
-The route `POST /v1/chat/completions` accepts the OpenAI chat format. The model name is `pipeline/<name>`. The [API reference](api.md#openai-compatible-api) describes the route.
-
-This example calls the `rag-qa` pipeline with curl. It needs xat-rag and xat-llm-engine running:
-
-```bash
-curl -s -X POST http://127.0.0.1:8430/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "pipeline/rag-qa", "messages": [{"role": "user", "content": "Which port does the orders service use?"}]}'
-```
-
-The answer is an OpenAI `chat.completion` object. The text is in `choices[0].message.content`. The run ID is in `xat.run_id`.
-
-### Call the route with the OpenAI Python library
-
-The steps below use the official OpenAI library for Python. The tested package is `openai`. Install it in a virtual environment, so that it stays apart from other Python programs.
-
-1. Create the virtual environment in the folder of your project:
-
-    ```bash
-    python3 -m venv .venv
-    ```
-
-2. Install the package in the environment:
-
-    ```bash
-    .venv/bin/pip install openai
-    ```
-
-3. Save this file as `ask.py`:
-
-    ```python
-    from openai import OpenAI
-
-    client = OpenAI(base_url="http://127.0.0.1:8430/v1", api_key="anything")
-
-    completion = client.chat.completions.create(
-        model="pipeline/rag-qa",
-        messages=[{"role": "user", "content": "Which port does the orders service use?"}],
-    )
-    print(completion.choices[0].message.content)
-    ```
-
-4. Run the file. The orchestrator does not check the API key, so any value works:
-
-    ```bash
-    .venv/bin/python ask.py
-    ```
-
-The output is the answer of the pipeline. This output needs xat-rag and xat-llm-engine running:
-
-```text
-The orders service uses port 8080 [1].
-```
-
 ## Upload documents to a RAG
 
 Warning: The ingestion routes have no authentication. Any program on the same machine can upload, delete documents and rebuild a RAG. Read [Ingestion proxy](api.md#ingestion-proxy) before you use these routes.
@@ -422,11 +366,11 @@ A retrieval profile is an alias for a xat-rag context. Pipelines use the alias. 
     curl -s http://127.0.0.1:8430/v1/contexts
     ```
 
-The `available` value is `true` when xat-rag lists the context. It is `false` when xat-rag does not list it, and `null` when xat-rag is not reachable. The context must exist in xat-rag. The orchestrator does not create it.
+The output lists the alias, the xat-rag context and the number of chunks. The route does not call xat-rag. The context must exist in xat-rag. The orchestrator does not create it.
 
 ## Add a model alias
 
-A model alias names a model of xat-llm-engine, with its limits.
+A model alias names a model of xat-llm-engine, with its request rules.
 
 1. Open `src/Xat.Orchestrator.Api/appsettings.json`.
 2. Add the alias under `Llm:Models`. Use this example:
@@ -434,22 +378,14 @@ A model alias names a model of xat-llm-engine, with its limits.
     ```json
     "small": {
       "Model": "local/small-model",
-      "ContextWindow": 4096,
-      "Tokenizer": "estimate",
       "Parallel": 1,
-      "SupportsGrammar": false,
       "AllowedFields": [ "temperature", "max_tokens" ]
     }
     ```
 
 3. Restart the orchestrator.
-4. Check the alias:
 
-    ```bash
-    curl -s http://127.0.0.1:8430/v1/models
-    ```
-
-The `Model` value must have the form `provider/model`. The `Tokenizer` value must be `estimate`. The adapter sends only the request fields in `AllowedFields`. A step that sets `temperature` sends it only when this list has `temperature`.
+The `Model` value must have the form `provider/model`. The adapter sends only the request fields in `AllowedFields`. A step that sets `temperature` sends it only when this list has `temperature`. The orchestrator does not check the model name with xat-llm-engine.
 
 To use the alias, set the `model` option of a step, for example `llm.generate`:
 
@@ -459,6 +395,8 @@ To use the alias, set the `model` option of a step, for example `llm.generate`:
     with:
       model: small
 ```
+
+The start checks the alias. A pipeline that names an alias that is not configured stops the start.
 
 ## Add a prompt template
 
@@ -561,7 +499,6 @@ The messages below come from the code or from a test run. The start messages go 
 | 503 with code `xat-llm-engine.unreachable` and the message `xat-llm-engine is not reachable.` | xat-llm-engine is not running, or the address is wrong. | Start xat-llm-engine. Check `Upstreams:XatLlmEngine:BaseUrl`. |
 | `GET /health/ready` returns `"status":"degraded"` | An upstream service is down. The orchestrator still answers with status 200. | Start the upstream service. |
 | 503 with code `admission.full` and `Retry-After: 1` | All run slots and queue places are in use. | Wait, and send the request again. Change `Api:MaxConcurrentRuns` or `Api:QueueLimit` only if the upstream services can take more work. |
-| 400 with code `prompt.too_large` and the message `The fixed parts of the prompt do not fit into the context window of the model.` | The prompt, the system prompt and the template are larger than the context window, minus `reserveOutput`. | Shorten the prompt. Use a model with a larger `ContextWindow`, or lower `reserveOutput`. |
 | 400 with code `input.invalid` and the message `input.prompt: the property is required.` | The input has no `prompt` key. | Send the key. The message names the path and the rule. |
 | 400 with code `request.content_type` and the message `The content type must be application/json.` | The POST request has another content type. | Set the header `Content-Type: application/json`. |
 | 400 with code `request.invalid_json` or `request.empty` | The body is not JSON, or it is empty. | Send a JSON object. |
@@ -577,9 +514,6 @@ The messages below come from the code or from a test run. The start messages go 
 | 404 with code `run.not_found` after some time | The store removed the finished run. `Jobs:RetentionMinutes` or `Jobs:RetainFinished` was reached. | Read the run sooner, or raise the limit. |
 | 503 with code `jobs.queue_full` and `Retry-After: 5` | All workers are busy, and the queue of waiting runs is full. | Wait 5 seconds, and submit again. Raise `Jobs:Workers` only if the upstream services can take more work. |
 | `"status": "failed"` in the `webhook` field of a run | The receiver is not running, refused the request, or did not answer in time. The `error` field tells why. | Start the receiver, and check the address in `webhook`. The run result does not change, so read it from `result`. |
-| 400 with code `request.model_invalid` | The `model` value does not start with `pipeline/`. For example, the value is `gpt-4o`. | Use the form `pipeline/<name>`. Take the name from `GET /v1/models`. |
-| 404 with code `model.not_found` | The name after `pipeline/` is not a pipeline, or the pipeline file was added after the last start. | Check the names in `GET /v1/models`. Restart the orchestrator after you add a file. |
-| 400 with code `request.pipeline_not_chat` | The pipeline has no input named `prompt`, so the OpenAI-compatible route cannot call it. | Call the pipeline with `POST /v1/pipelines/{name}/runs`. Or add an input named `prompt` to the pipeline. |
 | 404 with code `ingestion.route_disabled` | The operator turned off the route in `Ingestion:DisabledRoutes`, or `Ingestion:Enabled` is `false`. | Remove the route name from the list, and restart. The names are in [Route names and paths](api.md#route-names-and-paths). |
 | 404 with code `ingestion.route_not_found` | The path ends with a slash, or the document ID has a dot segment, such as `..`. xat-rag gets no request. | Remove the slash at the end of the path, or use a document ID without a dot segment. |
 | 403 with code `request.origin_not_allowed` | The request has an `Origin` header. A browser adds this header when a web page makes the request. The orchestrator refuses it on every route. | Call the orchestrator from a program, such as `curl` or a server-side client. A browser cannot call the orchestrator. |

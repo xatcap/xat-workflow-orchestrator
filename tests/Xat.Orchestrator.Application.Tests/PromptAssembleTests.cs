@@ -7,17 +7,16 @@ using Xat.Orchestrator.Domain.Retrieval;
 
 namespace Xat.Orchestrator.Application.Tests;
 
-/// <summary>Tests the prompt steps: escaping of untrusted text, numbered sources, ordering and the token budget.</summary>
+/// <summary>Tests the prompt steps: escaping of untrusted text, numbered sources, and ordering.</summary>
 public class PromptAssembleTests
 {
     private static async Task<(Xat.Orchestrator.Domain.Errors.Result<Xat.Orchestrator.Domain.Runs.RunResult> Result, FakeLlmClient Llm)> RunAsync(
         string pipelineJsonSteps,
         string inputJson,
-        FakeRetrievalClient? rag = null,
-        int contextWindow = 8192)
+        FakeRetrievalClient? rag = null)
     {
         var llm = new FakeLlmClient();
-        using var services = TestHost.Build(rag, llm, contextWindow);
+        using var services = TestHost.Build(rag, llm);
         var steps = System.Text.Json.JsonSerializer.Deserialize<List<StepSpec>>(pipelineJsonSteps, TestData.WebOptions)!
             .Select(spec => TestData.Step(spec.Id, spec.Uses, spec.With ?? "{}"))
             .ToList();
@@ -112,41 +111,6 @@ public class PromptAssembleTests
         Assert.True(content.IndexOf("name=\"jira\"", StringComparison.Ordinal) < content.IndexOf("name=\"docs\"", StringComparison.Ordinal));
         Assert.Contains("<source n=\"1\" title=\"ask-jira\"", content);
         Assert.Contains("<source n=\"2\" title=\"ask-docs\"", content);
-    }
-
-    /// <summary>A chunk that does not fit is left out. The last chunks go first, and the result has a note.</summary>
-    [Fact]
-    public async Task TooManyChunks_AreCut_FromTheEnd_WithAWarning()
-    {
-        var big = new string('x', 900);
-        var chunks = Enumerable.Range(1, 6).Select(i => TestData.Chunk($"c{i}", $"T{i}", big)).ToList();
-        var rag = new FakeRetrievalClient { OnRetrieve = _ => Result<RetrievedSet>.Ok(new RetrievedSet(chunks, 0)) };
-        var steps = """
-            [{"id":"u","uses":"prompt.user","with":"{\"text\":\"Q\"}"},
-             {"id":"r","uses":"rag.retrieve","with":"{\"profile\":\"default\"}"},
-             {"id":"a","uses":"prompt.assemble","with":"{\"reserveOutput\":100}"},
-             {"id":"g","uses":"llm.generate"}]
-            """;
-
-        var (result, llm) = await RunAsync(steps, "{}", rag, contextWindow: 1000);
-
-        Assert.True(result.IsSuccess);
-        var content = llm.Requests[0].Messages[^1].Content;
-        Assert.Contains("title=\"T1\"", content);
-        Assert.DoesNotContain("title=\"T6\"", content);
-        Assert.Contains(result.Value.Warnings, warning => warning.Contains("did not fit", StringComparison.Ordinal));
-    }
-
-    /// <summary>When the fixed parts alone do not fit, the step fails with a clear error and the LLM is not called.</summary>
-    [Fact]
-    public async Task FixedPartsTooLarge_FailsWithPromptTooLarge()
-    {
-        var (result, llm) = await RunAsync(BasicSteps, $$"""{"prompt":"{{new string('y', 4000)}}"}""", contextWindow: 1000);
-
-        Assert.False(result.IsSuccess);
-        Assert.Equal("prompt.too_large", result.Error!.Code);
-        Assert.Equal("a", result.Error!.Source);
-        Assert.Empty(llm.Requests);
     }
 
     /// <summary>The step that sets the prompt of the caller rejects an empty prompt.</summary>

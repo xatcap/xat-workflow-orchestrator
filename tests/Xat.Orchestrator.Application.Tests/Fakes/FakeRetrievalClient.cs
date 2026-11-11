@@ -25,7 +25,4 @@ internal sealed class FakeRetrievalClient : IRetrievalClient
         Queries.Add(query);
         return Task.FromResult(OnRetrieve(query));
     }
-
-    public Task<Result<RetrievalCatalog>> GetCatalogAsync(CancellationToken ct) =>
-        Task.FromResult(Result<RetrievalCatalog>.Ok(new RetrievalCatalog(["ask-all", "ask-docs"], ["docs"])));
 }

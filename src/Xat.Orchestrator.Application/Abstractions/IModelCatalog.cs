@@ -9,9 +9,6 @@ public interface IModelCatalog
     /// <summary>Gets the alias that is used when a step names no model.</summary>
     string DefaultAlias { get; }
 
-    /// <summary>Gets all model profiles.</summary>
-    IReadOnlyCollection<ModelProfile> All { get; }
-
     /// <summary>Finds a model profile.</summary>
     /// <param name="modelAlias">The alias, or <see langword="null"/> for the default alias.</param>
     /// <returns>The profile, or a not-found error.</returns>

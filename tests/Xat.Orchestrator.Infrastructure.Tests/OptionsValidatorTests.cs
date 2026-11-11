@@ -45,16 +45,28 @@ public class OptionsValidatorTests
         Assert.Contains(result.Failures!, failure => failure.Contains("DefaultModel", StringComparison.Ordinal));
     }
 
-    /// <summary>Only the estimate tokenizer exists. Another name is refused, so it cannot silently count wrong.</summary>
+    /// <summary>A key that the code does not know is not accepted. The start fails and the error names the key.</summary>
     [Fact]
-    public void Llm_UnknownTokenizerIsRefused()
+    public void Llm_UnknownKeyIsRefused()
     {
-        var options = new LlmOptions();
-        options.Models["default"] = new ModelOptions { Model = "local/x", Tokenizer = "tiktoken" };
+        const string key = "UnknownKey";
+        const string value = "1";
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Llm:DefaultModel"] = "default",
+                ["Llm:Models:default:Model"] = "local/x",
+                [$"Llm:Models:default:{key}"] = value,
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructure(configuration);
+        using var provider = services.BuildServiceProvider();
 
-        var result = new LlmOptionsValidator().Validate(null, options);
+        var exception = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IOptions<LlmOptions>>().Value);
 
-        Assert.Contains(result.Failures!, failure => failure.Contains("Tokenizer 'tiktoken'", StringComparison.Ordinal));
+        Assert.Contains($"'{key}'", exception.InnerException!.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A retrieval alias must point to a valid xat-rag context name and a valid number of chunks.</summary>
