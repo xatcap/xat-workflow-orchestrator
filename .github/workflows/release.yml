@@ -1,0 +1,85 @@
+name: Release
+
+# This workflow runs only when a tag in the form vX.Y.Z is pushed.
+# The filter must match the full tag name. Tags such as v1.2.3-rc1 do not match.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  # This job runs the repository code. It has read access only.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore XatOrchestrator.slnx
+
+      - name: Build
+        run: dotnet build XatOrchestrator.slnx --configuration Release --no-restore -p:Version="${TAG#v}"
+
+      - name: Test
+        run: dotnet test XatOrchestrator.slnx --configuration Release --no-build
+
+      # The publish output includes the pipeline files and the prompt templates.
+      - name: Publish the API
+        run: >
+          dotnet publish src/Xat.Orchestrator.Api/Xat.Orchestrator.Api.csproj
+          --configuration Release
+          --no-restore
+          --output artifacts/publish
+          -p:Version="${TAG#v}"
+
+      - name: Create the archive
+        run: |
+          mkdir -p artifacts/release
+          (cd artifacts/publish && zip -r "../release/xat-orchestrator-${TAG}.zip" .)
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-archive
+          path: artifacts/release/*.zip
+          if-no-files-found: error
+
+  # This job does not run repository code. It has write access to create the release.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the archive
+        uses: actions/download-artifact@v4
+        with:
+          name: release-archive
+          path: release
+
+      - name: Create the GitHub release
+        run: >
+          gh release create "$TAG"
+          "release/xat-orchestrator-${TAG}.zip"
+          --repo "$GITHUB_REPOSITORY"
+          --title "$TAG"
+          --generate-notes
+          --verify-tag
