@@ -24,7 +24,7 @@ internal sealed class ApiOptions
     /// <summary>Checks the settings. A wrong value stops the start, so it never shows up in a request.</summary>
     /// <param name="pipelines">The pipelines, to check that the default pipeline exists.</param>
     /// <returns>The messages about wrong settings. An empty list means that the settings are valid.</returns>
-    public IReadOnlyList<string> Validate(Xat.Orchestrator.Application.Abstractions.IPipelineCatalog pipelines)
+    public IReadOnlyList<string> Validate(Xat.Orchestrator.Application.Abstractions.Pipelines.IPipelineCatalog pipelines)
     {
         ArgumentNullException.ThrowIfNull(pipelines);
 

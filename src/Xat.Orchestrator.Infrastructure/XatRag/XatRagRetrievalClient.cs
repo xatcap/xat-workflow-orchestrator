@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using Xat.Orchestrator.Application.Abstractions;
+using Xat.Orchestrator.Application.Abstractions.Retrieval;
 using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Retrieval;
 using Xat.Orchestrator.Infrastructure.Discovery;

@@ -432,10 +432,10 @@ A template writes its text as trusted text. The assemble step does not escape it
 
 Use a step when no built-in step does the job. A step is a class that implements `IPipelineStep<TOptions>`. The options class holds the values from the `with` block of the step.
 
-1. Create the options class and the step class. Put each class in its own file in `src/Xat.Orchestrator.Application/Steps/`. The file `TextSuffixOptions.cs` holds this class:
+1. Create the options class and the step class. Create a folder for the step area in `src/Xat.Orchestrator.Application/Steps/`, for example `Custom/`. Put each class in its own file in that folder. The namespace of the classes is `Xat.Orchestrator.Application.Steps.Custom`. The file `TextSuffixOptions.cs` holds this class:
 
     ```csharp
-    namespace Xat.Orchestrator.Application.Steps;
+    namespace Xat.Orchestrator.Application.Steps.Custom;
 
     /// <summary>The options of <see cref="TextSuffixStep"/>.</summary>
     public sealed class TextSuffixOptions
@@ -447,9 +447,10 @@ Use a step when no built-in step does the job. A step is a class that implements
     The file `TextSuffixStep.cs` holds this class:
 
     ```csharp
-    using Xat.Orchestrator.Application.Engine;
+    using Xat.Orchestrator.Application.Engine.Execution;
+    using Xat.Orchestrator.Application.Engine.StepContracts;
 
-    namespace Xat.Orchestrator.Application.Steps;
+    namespace Xat.Orchestrator.Application.Steps.Custom;
 
     /// <summary>Adds a suffix to the prompt of the caller.</summary>
     public sealed class TextSuffixStep : IPipelineStep<TextSuffixOptions>
@@ -462,7 +463,13 @@ Use a step when no built-in step does the job. A step is a class that implements
     }
     ```
 
-2. Register the step in the `AddApplication` method of `src/Xat.Orchestrator.Application/DependencyInjection.cs`. Add it to the chain of `AddPipelineStep` calls:
+2. Register the step in the `AddApplication` method of `src/Xat.Orchestrator.Application/DependencyInjection.cs`. Add this `using` line to the top of the file:
+
+    ```csharp
+    using Xat.Orchestrator.Application.Steps.Custom;
+    ```
+
+    Then add the step to the chain of `AddPipelineStep` calls:
 
     ```csharp
     .AddPipelineStep<TextSuffixStep, TextSuffixOptions>(

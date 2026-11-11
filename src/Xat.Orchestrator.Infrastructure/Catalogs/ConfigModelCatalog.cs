@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Options;
-using Xat.Orchestrator.Application.Abstractions;
+using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Domain.Retrieval;
-using Xat.Orchestrator.Infrastructure.Options;
+using Xat.Orchestrator.Infrastructure.Options.Llm;
 
 namespace Xat.Orchestrator.Infrastructure.Catalogs;
 

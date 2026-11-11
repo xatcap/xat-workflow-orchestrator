@@ -955,7 +955,15 @@ Pipeline 'bad': step 'not-a-step' uses the unknown step type 'not.a.step'.
 
 The steps below are the built-in step types. Each option is optional unless the table says otherwise. The `steps.<id>.<name>` values are the results that later steps can read with an expression. A step without results stores nothing that an expression can read.
 
-Each step has one class in `src/Xat.Orchestrator.Application/Steps/`. The option class has the same name with `Options`.
+Each step has one class in the folder of its area under `src/Xat.Orchestrator.Application/Steps/`. The areas are these:
+
+- `Prompt/` has `prompt.system`, `prompt.user`, `prompt.context`, `prompt.append` and `prompt.assemble`.
+- `Retrieval/` has `rag.retrieve` and `retrieval.merge`.
+- `Flow/` has `flow.complete-if`.
+- `Llm/` has `llm.generate`.
+- `Citations/` has `answer.verify-citations`.
+
+The option class has the same name with `Options`.
 
 ### prompt.system
 

@@ -75,15 +75,25 @@ The repository has these main folders:
 - `src/Xat.Orchestrator.Api/`
   - `Program.cs` starts the host. It registers the services, the admission control and the routes. It also runs the fail-fast checks.
   - `Endpoints/` has the route groups: `CatalogEndpoints.cs`, `HealthEndpoints.cs`, `RunEndpoints.cs` and `RunStatusEndpoints.cs`. `RunRules.cs` holds the rules that the run routes share, such as the rate limit policy name and the stream mode check.
-  - `AsyncRunWorker.cs` starts the run workers and the webhook delivery workers. `WebhookPayloadWriter.cs` writes the webhook body.
-  - `Contracts/` has the JSON settings and the request and response types.
-  - `ApiErrors.cs`, `GlobalExceptionHandler.cs`, `ListenAddressPolicy.cs` and `ApiOptions.cs` hold the error mapping, the unhandled exception handler, the loopback check and the API settings. `BrowserOriginGuard.cs` refuses every request that has an `Origin` header.
+  - `Runs/` has `AsyncRunWorker.cs`, which starts the run workers and the webhook delivery workers. `WebhookPayloadWriter.cs` writes the webhook body.
+  - `Contracts/` has `ApiJson.cs`, which holds the JSON settings. The request and response types are in the folders `Runs/`, `Errors/`, `Webhooks/` and `Catalog/`.
+  - `Errors/` has `ApiErrors.cs`, which maps the errors to HTTP responses. `GlobalExceptionHandler.cs` is the unhandled exception handler. `ExceptionLog.cs` holds its log message.
+  - `Hosting/` has `ListenAddressPolicy.cs`, which holds the loopback check. `BrowserOriginGuard.cs` refuses every request that has an `Origin` header. `StartupLog.cs` holds the log messages of the host start.
+  - `ApiOptions.cs` holds the API settings.
   - `Ingestion/` holds the ingestion proxy. `IngestionEndpoints.cs` maps the seven routes, and `IngestionRoutes.cs` holds their names. `IngestionForwarder.cs` sends the request, and `IngestionTransformer.cs` lets only the allowed headers through. `IngestionRawPath.cs` builds the path of a delete-document request. `IngestionOptions.cs` holds the settings.
   - `appsettings.json` holds the default settings.
 - `src/Xat.Orchestrator.Application/`
-  - `Abstractions/` has the ports and their records.
-  - `Engine/` has the runner, the state, the expression resolver, the schema validator, the step, middleware and hook interfaces, the run events and the step registry.
-  - `Steps/` has one class for each built-in step, and one options class for each step.
+  - `Abstractions/` has the ports and their records. Each area has a folder: `Llm/`, `Pipelines/`, `Retrieval/` and `Runs/`.
+  - `Engine/` has the pipeline engine. It has these folders:
+    - `Execution/` has the runner, the step context and outcome, the step invocation, the options binder and the runner settings.
+    - `State/` has the state of a run and the prompt draft.
+    - `StepContracts/` has the step and validator interfaces and the step traits.
+    - `Registry/` has the step registry and the service registration methods.
+    - `Hooks/` has the middleware and hook interfaces and the built-in activity middleware.
+    - `Events/` has the run events and the event sinks.
+    - `Runs/` has the run request, the run handle and the run IDs.
+    - `Inputs/` has the expression resolver, the input schema validator and the JSON helpers.
+  - `Steps/` has one folder for each step area: `Prompt/`, `Retrieval/`, `Flow/`, `Llm/` and `Citations/`. Each folder has one class for each built-in step, and one options class for each step. `StepText.cs` holds the helpers that the steps share.
   - `Definitions/` has the validator of pipeline definitions.
   - `Jobs/` has the asynchronous run service, its settings and the records of queued runs and pending webhooks.
   - `DependencyInjection.cs` registers the engine and the built-in steps.
@@ -94,7 +104,7 @@ The repository has these main folders:
   - `Definitions/` has the pipeline catalog and the YAML reader.
   - `Discovery/` has the upstream address logic, the address handler and the error mapping for the upstream services.
   - `Health/` has the health checks of the upstream services.
-  - `Options/` has the settings classes and their validators.
+  - `Options/` has the settings classes and their validators. Each area has a folder: `Llm/`, `Retrieval/`, `Upstream/`, `Webhooks/` and `Runtime/`.
   - `Jobs/` has the in-memory run store. `Webhooks/` has the webhook policy and the webhook sender.
   - `Templates/` has the prompt template store, based on Fluid.
   - `XatRag/` has the retrieval adapter and the address class `XatRagEndpoint`. `XatLlmEngine/` has the LLM adapter.
@@ -413,12 +423,12 @@ The steps below name the files to change. Most changes need no change to the eng
 
 ### Add a step
 
-1. Create the options class and the step class in `src/Xat.Orchestrator.Application/Steps/`. Use one file for each class.
-2. Register the step in the `AddApplication` method of `src/Xat.Orchestrator.Application/DependencyInjection.cs`. Use `AddPipelineStep<TStep, TOptions>(name, traits, summary)`.
-3. Add a test in `tests/Xat.Orchestrator.Application.Tests/`.
+1. Create the options class and the step class in the area folder of `src/Xat.Orchestrator.Application/Steps/`, for example `Steps/Llm/`. Use one file for each class. The namespace follows the folder.
+2. Register the step in the `AddApplication` method of `src/Xat.Orchestrator.Application/DependencyInjection.cs`. Add a `using` for the namespace of the step. Use `AddPipelineStep<TStep, TOptions>(name, traits, summary)`.
+3. Add a test in the matching folder of `tests/Xat.Orchestrator.Application.Tests/`, for example `Steps/`.
 4. Add the step to the built-in steps list in `docs/api.md`.
 
-A step that calls an upstream service needs a port in `Application/Abstractions/`. It also needs an adapter in `Infrastructure/`. The adapter is registered in `src/Xat.Orchestrator.Infrastructure/DependencyInjection.cs`.
+A step that calls an upstream service needs a port in the matching folder of `Application/Abstractions/`, for example `Retrieval/`. It also needs an adapter in `Infrastructure/`. The adapter is registered in `src/Xat.Orchestrator.Infrastructure/DependencyInjection.cs`.
 
 ### Add a context
 
@@ -427,7 +437,7 @@ A context is a xat-rag context, with a retrieval alias for the orchestrator.
 1. Add the alias under `Retrieval:Profiles` in `src/Xat.Orchestrator.Api/appsettings.json`.
 2. Restart the orchestrator.
 
-No code change is needed. The context must exist in xat-rag. The validator in `src/Xat.Orchestrator.Infrastructure/Options/RetrievalOptionsValidator.cs` checks the alias and the number of chunks.
+No code change is needed. The context must exist in xat-rag. The validator in `src/Xat.Orchestrator.Infrastructure/Options/Retrieval/RetrievalOptionsValidator.cs` checks the alias and the number of chunks.
 
 ### Add a model
 
@@ -440,9 +450,9 @@ No code change is needed for a model that uses the fields that the adapter alrea
 
 ### Add a middleware
 
-1. Create a class that implements `IStepMiddleware`. Put it in `src/Xat.Orchestrator.Application/Engine/`, or in the module that owns it.
+1. Create a class that implements `IStepMiddleware`. Put it in `src/Xat.Orchestrator.Application/Engine/Hooks/`, or in the module that owns it.
 2. Register it in the `AddApplication` method of `src/Xat.Orchestrator.Application/DependencyInjection.cs`, with `AddStepMiddleware<TMiddleware>()`. The new middleware goes after the built-in one.
-3. Add a test in `tests/Xat.Orchestrator.Application.Tests/`.
+3. Add a test in `tests/Xat.Orchestrator.Application.Tests/Engine/`.
 
 The middleware runs for every step of every pipeline. A middleware that changes the flow must return a valid outcome.
 
@@ -450,7 +460,7 @@ The middleware runs for every step of every pipeline. A middleware that changes 
 
 1. Create a class that implements `IPipelineObserver`. Override only the methods that you need.
 2. Register it in the `AddApplication` method of `src/Xat.Orchestrator.Application/DependencyInjection.cs`, with `AddPipelineObserver<TObserver>()`.
-3. Add a test in `tests/Xat.Orchestrator.Application.Tests/`.
+3. Add a test in `tests/Xat.Orchestrator.Application.Tests/Engine/`.
 
 A hook has 5 seconds for each call. Keep the work of a hook short.
 

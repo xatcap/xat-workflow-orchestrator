@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Xat.Orchestrator.Application.Abstractions;
+using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Infrastructure.Discovery;

@@ -3,7 +3,6 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Infrastructure.Options;
 
 namespace Xat.Orchestrator.Infrastructure.Discovery;
 
