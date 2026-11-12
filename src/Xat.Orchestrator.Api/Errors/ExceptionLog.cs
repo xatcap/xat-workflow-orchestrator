@@ -1,6 +1,3 @@
-using Microsoft.AspNetCore.Diagnostics;
-using Xat.Orchestrator.Domain.Errors;
-
 namespace Xat.Orchestrator.Api.Errors;
 
 /// <summary>Log messages for unexpected exceptions. The source generator writes the method bodies.</summary>

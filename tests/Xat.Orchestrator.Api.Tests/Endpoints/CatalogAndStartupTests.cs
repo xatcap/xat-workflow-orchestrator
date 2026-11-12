@@ -114,6 +114,19 @@ public class CatalogAndStartupTests
         Assert.ThrowsAny<Exception>(() => factory.CreateClient());
     }
 
+    /// <summary>A number out of its range in an Api or ingestion setting stops the start too.</summary>
+    [Theory]
+    [InlineData("Api:MaxConcurrentRuns", "0")]
+    [InlineData("Ingestion:ActivityTimeoutSeconds", "0")]
+    [InlineData("Upstreams:XatRag:RetryCount", "9")]
+    [InlineData("Api:DefaultPipeline", "missing")]
+    public async Task BadApiSetting_StopsTheStart(string key, string value)
+    {
+        await using var factory = ApiHost.Create(settings: new Dictionary<string, string?> { [key] = value });
+
+        Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+    }
+
     /// <summary>The JSON of every response uses snake_case names, like the upstream services.</summary>
     [Fact]
     public async Task Json_UsesSnakeCase()

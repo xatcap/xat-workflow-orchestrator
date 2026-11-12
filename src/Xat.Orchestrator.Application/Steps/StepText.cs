@@ -2,8 +2,6 @@ using Xat.Orchestrator.Application.Abstractions.Pipelines;
 using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Application.Engine.State;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Retrieval;
 
 namespace Xat.Orchestrator.Application.Steps;
 
@@ -20,16 +18,14 @@ internal static class StepText
             return ["Set exactly one of 'text' and 'template'."];
         }
 
-        if (hasTemplate && !template!.Contains("${", StringComparison.Ordinal))
+        if (!hasTemplate || ExpressionResolver.IsExpression(template))
         {
-            var found = templates.Find(template);
-            if (!found.IsSuccess)
-            {
-                return [found.Error.Message];
-            }
+            return [];
         }
 
-        return [];
+        // The name comes from the pipeline file here, not from a caller, so the message can name it.
+        var found = templates.Find(template!);
+        return found.IsSuccess ? [] : [$"{found.Error.Message} The template is '{template}'."];
     }
 
     /// <summary>Gets the text from the text option, or from the rendered template.</summary>

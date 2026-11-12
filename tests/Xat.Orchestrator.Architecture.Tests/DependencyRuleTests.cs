@@ -16,21 +16,24 @@ public class DependencyRuleTests
     /// <summary>The assembly of the Infrastructure layer.</summary>
     private static readonly Assembly _infrastructure = typeof(Infrastructure.DependencyInjection).Assembly;
 
+    /// <summary>The assembly of the Api layer.</summary>
+    private static readonly Assembly _api = typeof(Program).Assembly;
+
     /// <summary>
-    /// Domain references only the base class library. This allow-list also catches a package that the
-    /// deny-list in the next test does not name, such as a JSON library or a database library.
+    /// Domain references only an exact list of base class library assemblies. A new reference, also one from the
+    /// base class library such as <c>System.Net.Http</c>, fails the test, so the reference gets a review.
     /// </summary>
     [Fact]
-    public void Domain_ReferencesOnlyTheBaseClassLibrary()
+    public void Domain_ReferencesOnlyTheListedBaseClassLibraryAssemblies()
     {
-        var allowedPrefixes = new[] { "System", "mscorlib", "netstandard" };
+        string[] allowed = ["System.Collections", "System.Runtime", "System.Text.Json"];
 
-        var unexpected = _domain.GetReferencedAssemblies()
+        var references = _domain.GetReferencedAssemblies()
             .Select(name => name.Name ?? string.Empty)
-            .Where(name => !allowedPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.True(unexpected.Count == 0, string.Join(", ", unexpected));
+        Assert.True(references.All(allowed.Contains), string.Join(", ", references));
     }
 
     /// <summary>Domain does not use a type from an outer layer or from a framework namespace.</summary>
@@ -90,7 +93,7 @@ public class DependencyRuleTests
 
     /// <summary>
     /// An adapter is reachable only through the port that it implements. The classes of the adapters are not public,
-    /// except the registration class and the start error.
+    /// except the registration class, the start error and the address of xat-rag for the ingestion proxy of the host.
     /// </summary>
     [Fact]
     public void InfrastructureAdapters_AreNotPublic()
@@ -102,7 +105,38 @@ public class DependencyRuleTests
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["ConfigurationFilesException", "DependencyInjection"], publicTypes);
+        Assert.Equal(["ConfigurationFilesException", "DependencyInjection", "XatRagEndpoint"], publicTypes);
+    }
+
+    /// <summary>
+    /// The Api layer uses the Infrastructure layer only in its start code: the program and the <c>Hosting</c> folder.
+    /// Routes, contracts and the ingestion proxy use the Application ports only.
+    /// </summary>
+    [Fact]
+    public void Api_UsesInfrastructureOnlyInStartCode()
+    {
+        var result = Types.InAssembly(_api)
+            .That().DoNotResideInNamespace("Xat.Orchestrator.Api.Hosting")
+            .And().DoNotHaveName("Program")
+            .And().DoNotHaveNameStartingWith("<")
+            .ShouldNot().HaveDependencyOn("Xat.Orchestrator.Infrastructure")
+            .GetResult();
+
+        Assert.True(result.IsSuccessful, Describe(result));
+    }
+
+    /// <summary>The ports in <c>Application.Abstractions</c> are interfaces or data records. They hold no logic of an adapter.</summary>
+    [Fact]
+    public void ApplicationAbstractions_AreInterfacesOrRecords()
+    {
+        var offending = Types.InAssembly(_applicationLayer)
+            .That().ResideInNamespaceStartingWith("Xat.Orchestrator.Application.Abstractions")
+            .GetTypes()
+            .Where(type => !type.IsInterface && type.GetMethod("<Clone>$") is null && !type.IsEnum)
+            .Select(type => type.FullName)
+            .ToList();
+
+        Assert.True(offending.Count == 0, string.Join(", ", offending));
     }
 
     /// <summary>Makes a text from the types that broke a rule.</summary>

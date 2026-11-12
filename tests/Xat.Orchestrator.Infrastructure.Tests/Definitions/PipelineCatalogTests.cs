@@ -4,11 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Application;
 using Xat.Orchestrator.Application.Abstractions.Pipelines;
+using Xat.Orchestrator.Application.Engine.Execution;
 using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Pipelines;
 using Xat.Orchestrator.Infrastructure.Definitions;
-using Xat.Orchestrator.Infrastructure.Discovery;
+using Xat.Orchestrator.Infrastructure.Options.Upstream;
 
 namespace Xat.Orchestrator.Infrastructure.Tests.Definitions;
 
@@ -53,7 +53,7 @@ public sealed class PipelineCatalogTests : IDisposable
         var configuration = builder.AddInMemoryCollection(useShippedSettings ? settings : baseline).Build();
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddApplication();
+        services.AddApplication(configuration);
         services.AddInfrastructure(configuration);
         return services.BuildServiceProvider();
     }
@@ -78,6 +78,36 @@ public sealed class PipelineCatalogTests : IDisposable
             catalog.All.Select(pipeline => pipeline.Name).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// The shipped settings use the documented xat-rag address. The xat-llm-engine timeout is shorter than the run timeout,
+    /// so a slow model gives the engine timeout error and not the run timeout error.
+    /// </summary>
+    [Fact]
+    public void ShippedSettings_HaveTheDocumentedDefaults()
+    {
+        using var services = Build([], useShippedSettings: true);
+
+        var upstreams = services.GetRequiredService<IOptions<UpstreamOptions>>().Value;
+        var runs = services.GetRequiredService<IOptions<RunnerOptions>>().Value;
+
+        Assert.Equal("http://127.0.0.1:8421", upstreams.XatRag.BaseUrl);
+        Assert.True(TimeSpan.FromSeconds(upstreams.XatLlmEngine.RequestTimeoutSeconds) < runs.RunTimeout);
+        Assert.True(TimeSpan.FromSeconds(upstreams.XatRag.RequestTimeoutSeconds) < runs.RunTimeout);
+    }
+
+    /// <summary>The catalog reads .yml files, so the build must copy them too. Otherwise such a pipeline is missing after a build.</summary>
+    [Fact]
+    public void Build_CopiesYamlAndYmlPipelineFiles()
+    {
+        var project = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "Xat.Orchestrator.Api", "Xat.Orchestrator.Api.csproj"));
+        File.WriteAllText(Path.Combine(_folder, "extra.yml"), "name: extra\nsteps:\n  - uses: prompt.user\n    with: { text: hi }\n  - uses: prompt.assemble\n  - uses: llm.generate\n");
+        using var services = Build(new Dictionary<string, string?> { ["Pipelines:Folder"] = _folder }, useShippedSettings: false);
+
+        Assert.Contains(@"pipelines\**\*.yaml", project, StringComparison.Ordinal);
+        Assert.Contains(@"pipelines\**\*.yml", project, StringComparison.Ordinal);
+        Assert.True(services.GetRequiredService<IPipelineCatalog>().Find("extra").IsSuccess);
+    }
+
     /// <summary>A new file in the folder is a new pipeline. No code changes.</summary>
     [Fact]
     public void NewFile_IsANewPipeline()
@@ -99,10 +129,11 @@ public sealed class PipelineCatalogTests : IDisposable
         File.WriteAllText(Path.Combine(_folder, "b.yaml"), "name: b\nsteepz: 1\nsteps: []\n");
         using var services = Build(new Dictionary<string, string?> { ["Pipelines:Folder"] = _folder }, useShippedSettings: false);
 
-        var exception = Assert.Throws<ConfigurationFilesException>(() => services.GetRequiredService<IPipelineCatalog>());
+        var problems = services.GetRequiredService<IPipelineCatalog>().Validate();
 
-        Assert.Contains(exception.Problems, problem => problem.Contains("unknown step type 'nope.step'", StringComparison.Ordinal));
-        Assert.Contains(exception.Problems, problem => problem.Contains("b.yaml", StringComparison.Ordinal));
+        Assert.Contains(problems, problem => problem.Contains("unknown step type 'nope.step'", StringComparison.Ordinal));
+        Assert.Contains(problems, problem => problem.Contains("b.yaml", StringComparison.Ordinal));
+        Assert.Throws<ConfigurationFilesException>(() => services.GetRequiredService<IPipelineCatalog>().All);
     }
 
     /// <summary>Two files with the same pipeline name are not allowed.</summary>
@@ -114,9 +145,9 @@ public sealed class PipelineCatalogTests : IDisposable
         File.WriteAllText(Path.Combine(_folder, "two.yaml"), content);
         using var services = Build(new Dictionary<string, string?> { ["Pipelines:Folder"] = _folder }, useShippedSettings: false);
 
-        var exception = Assert.Throws<ConfigurationFilesException>(() => services.GetRequiredService<IPipelineCatalog>());
+        var problems = services.GetRequiredService<IPipelineCatalog>().Validate();
 
-        Assert.Contains(exception.Problems, problem => problem.Contains("exists already", StringComparison.Ordinal));
+        Assert.Contains(problems, problem => problem.Contains("exists already", StringComparison.Ordinal));
     }
 
     /// <summary>A missing or empty folder stops the start with a clear message.</summary>
@@ -125,12 +156,12 @@ public sealed class PipelineCatalogTests : IDisposable
     {
         using var services = Build(new Dictionary<string, string?> { ["Pipelines:Folder"] = _folder }, useShippedSettings: false);
 
-        var empty = Assert.Throws<ConfigurationFilesException>(() => services.GetRequiredService<IPipelineCatalog>());
-        Assert.Contains("has no pipeline file", empty.Message, StringComparison.Ordinal);
+        var empty = services.GetRequiredService<IPipelineCatalog>().Validate();
+        Assert.Contains(empty, problem => problem.Contains("has no pipeline file", StringComparison.Ordinal));
 
         using var other = Build(new Dictionary<string, string?> { ["Pipelines:Folder"] = Path.Combine(_folder, "nope") }, useShippedSettings: false);
-        var missing = Assert.Throws<ConfigurationFilesException>(() => other.GetRequiredService<IPipelineCatalog>());
-        Assert.Contains("does not exist", missing.Message, StringComparison.Ordinal);
+        var missing = other.GetRequiredService<IPipelineCatalog>().Validate();
+        Assert.Contains(missing, problem => problem.Contains("does not exist", StringComparison.Ordinal));
     }
 
     /// <summary>A template with a syntax error stops the start. A valid template renders with the input.</summary>
@@ -143,7 +174,7 @@ public sealed class PipelineCatalogTests : IDisposable
             var template = services.GetRequiredService<IPromptTemplateStore>().Find("good@1").Value!;
             var input = JsonValues.ToObject(JsonSerializer.SerializeToElement(new { name = "Ada", loud = true }));
             Assert.Equal("Hello Ada! LOUD", template.Render(new Dictionary<string, object?> { ["input"] = input }));
-            Assert.Equal(ErrorKind.NotFound, services.GetRequiredService<IPromptTemplateStore>().Find("good@2").Error!.Kind);
+            Assert.Equal(ErrorKind.Validation, services.GetRequiredService<IPromptTemplateStore>().Find("good@2").Error!.Kind);
         }
 
         File.WriteAllText(Path.Combine(_folder, "bad@1.liquid"), "{% if %}");

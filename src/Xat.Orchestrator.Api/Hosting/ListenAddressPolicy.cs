@@ -25,6 +25,33 @@ internal static class ListenAddressPolicy
         }
     }
 
+    /// <summary>
+    /// Checks every setting that sets a listen address, before the server binds. These are <c>urls</c> (from <c>--urls</c>,
+    /// <c>ASPNETCORE_URLS</c>, <c>DOTNET_URLS</c> and appsettings.json) and <c>Kestrel:Endpoints:*:Url</c>.
+    /// <c>HTTP_PORTS</c> and <c>HTTPS_PORTS</c> listen on all network interfaces, so they are refused when they are the only source.
+    /// Kestrel ignores them when <c>urls</c> or an endpoint is set, so they are allowed then.
+    /// </summary>
+    /// <param name="configuration">The configuration of the host.</param>
+    /// <exception cref="InvalidOperationException">A setting gives an address that is not loopback.</exception>
+    public static void EnsureLoopbackOnly(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var urls = SplitUrls(configuration["urls"]);
+        var endpoints = configuration.GetSection("Kestrel:Endpoints").GetChildren()
+            .Select(endpoint => endpoint["Url"])
+            .OfType<string>()
+            .ToList();
+        EnsureLoopbackOnly(urls.Concat(endpoints));
+
+        var ports = new[] { configuration["HTTP_PORTS"], configuration["HTTPS_PORTS"] };
+        if (urls.Count == 0 && endpoints.Count == 0 && ports.Any(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            throw new InvalidOperationException(
+                "HTTP_PORTS and HTTPS_PORTS listen on all network interfaces. Set urls, for example --urls http://127.0.0.1:8430, in their place.");
+        }
+    }
+
     /// <summary>Splits the value of the <c>urls</c> setting into single addresses.</summary>
     /// <param name="urls">The setting value. Semicolons separate the addresses. The value can be <see langword="null"/>.</param>
     /// <returns>The addresses, or an empty list when the setting is not set.</returns>

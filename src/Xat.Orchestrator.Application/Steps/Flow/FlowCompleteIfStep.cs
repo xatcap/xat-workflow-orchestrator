@@ -1,8 +1,7 @@
 using System.Collections;
-using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Xat.Orchestrator.Application.Engine.Execution;
+using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Application.Engine.StepContracts;
 using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Domain.Runs;
@@ -30,19 +29,15 @@ public sealed class FlowCompleteIfStep : IPipelineStep<FlowCompleteIfOptions>, I
     public IReadOnlyList<string> Validate(FlowCompleteIfOptions options, StepValidationContext context)
     {
         var messages = new List<string>();
-        if ((options.IsEmpty is null) == (options.EqualsValue is null))
+        var hasIsEmpty = options.IsEmpty is not null || context.DeferredOptions.Contains("isEmpty");
+        if (hasIsEmpty == (options.EqualsValue is not null))
         {
             messages.Add("Set exactly one of 'isEmpty' and 'equals'.");
         }
 
-        var parts = (options.Key ?? string.Empty).Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0 || (parts[0] != "input" && parts[0] != "steps"))
+        if (ExpressionPath.Check(options.Key, context.EarlierStepIds) is { } reason)
         {
-            messages.Add("The key must start with 'input.' or 'steps.'.");
-        }
-        else if (parts[0] == "steps" && (parts.Length != 3 || !context.EarlierStepIds.Contains(parts[1])))
-        {
-            messages.Add("The key must have the form steps.<id>.<name> and name an earlier step.");
+            messages.Add($"The key {reason}.");
         }
 
         return messages;

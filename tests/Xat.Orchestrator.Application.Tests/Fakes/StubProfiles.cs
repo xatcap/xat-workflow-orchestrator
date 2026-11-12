@@ -1,12 +1,5 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Xat.Orchestrator.Application;
 using Xat.Orchestrator.Application.Abstractions.Retrieval;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Pipelines;
 using Xat.Orchestrator.Domain.Retrieval;
 
 namespace Xat.Orchestrator.Application.Tests.Fakes;
@@ -26,5 +19,5 @@ internal sealed class StubProfiles : IRetrievalProfiles
     public Result<RetrievalProfile> Resolve(string profileAlias) =>
         _profiles.TryGetValue(profileAlias, out var profile)
             ? Result<RetrievalProfile>.Ok(profile)
-            : Result<RetrievalProfile>.Fail(new PipelineError("retrieval.profile_unknown", "The profile is not configured.", ErrorKind.NotFound));
+            : Result<RetrievalProfile>.Fail(new PipelineError("retrieve.profile_unknown", "The profile is not configured.", ErrorKind.Validation));
 }

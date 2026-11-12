@@ -1,9 +1,3 @@
-using System.Collections.Concurrent;
-using System.Net;
-using System.Text.Json;
-using Microsoft.Extensions.Options;
-using Xat.Orchestrator.Domain.Errors;
-
 namespace Xat.Orchestrator.Infrastructure.Discovery;
 
 /// <summary>The upstream services that the orchestrator calls.</summary>

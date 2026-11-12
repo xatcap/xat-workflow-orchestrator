@@ -1,13 +1,5 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Xat.Orchestrator.Application;
 using Xat.Orchestrator.Application.Abstractions.Pipelines;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Pipelines;
-using Xat.Orchestrator.Domain.Retrieval;
 
 namespace Xat.Orchestrator.Application.Tests.Fakes;
 
@@ -17,7 +9,7 @@ internal sealed class StubTemplates : IPromptTemplateStore
     public Result<IPromptTemplate> Find(string reference) =>
         reference == "rules@1"
             ? Result<IPromptTemplate>.Ok(new RulesTemplate())
-            : Result<IPromptTemplate>.Fail(new PipelineError("template.unknown", "The template does not exist.", ErrorKind.NotFound));
+            : Result<IPromptTemplate>.Fail(new PipelineError("template.unknown", "The template does not exist.", ErrorKind.Validation));
 
     private sealed class RulesTemplate : IPromptTemplate
     {

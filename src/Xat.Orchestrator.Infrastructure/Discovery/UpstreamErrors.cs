@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Xat.Orchestrator.Domain.Errors;
 
@@ -9,8 +10,11 @@ namespace Xat.Orchestrator.Infrastructure.Discovery;
 /// <c>{"error":{"message","type"}</c> and send <c>Retry-After</c> with 429 and 503. The anti-corruption rule applies:
 /// no upstream type or status code leaves the adapter.
 /// </summary>
-internal static class UpstreamErrors
+internal static partial class UpstreamErrors
 {
+    [GeneratedRegex("^[a-z0-9_]{1,64}\\z")]
+    private static partial Regex TypePattern();
+
     private const int MaxMessageLength = 300;
 
     /// <summary>Reads the error of a response that is not a success.</summary>
@@ -63,7 +67,8 @@ internal static class UpstreamErrors
             _ => ErrorKind.UpstreamFailed,
         };
 
-        var code = $"{upstream}.{type ?? "http_" + (int)status}";
+        // The type comes from the upstream, so it goes into the code only when it is a short plain name. The code shows in logs.
+        var code = $"{upstream}.{(type is not null && TypePattern().IsMatch(type) ? type : "http_" + (int)status)}";
         var text = string.IsNullOrWhiteSpace(message)
             ? $"{upstream} answered with status {(int)status}."
             : $"{upstream} reported an error. {Truncate(message)}";
@@ -75,8 +80,14 @@ internal static class UpstreamErrors
     /// <param name="upstream">The name of the upstream.</param>
     /// <param name="callerToken">The token of the caller. A cancel by this token is not an upstream failure.</param>
     /// <param name="error">The error, when the method returns <see langword="true"/>.</param>
+    /// <param name="phase">The part of the call that failed. A broken connection while a stream is read means that the stream is cut off.</param>
     /// <returns><see langword="true"/> when the exception is a failure of the upstream call.</returns>
-    public static bool TryMap(Exception exception, string upstream, CancellationToken callerToken, out PipelineError error)
+    public static bool TryMap(
+        Exception exception,
+        string upstream,
+        CancellationToken callerToken,
+        out PipelineError error,
+        UpstreamCallPhase phase = UpstreamCallPhase.Request)
     {
         switch (exception)
         {
@@ -88,7 +99,14 @@ internal static class UpstreamErrors
             case OperationCanceledException:
                 error = new PipelineError($"{upstream}.timeout", $"{upstream} did not answer in time.", ErrorKind.Timeout, Source: upstream);
                 return true;
+            case UpstreamNotLocatedException notLocated:
+                error = notLocated.Error with { Source = upstream };
+                return true;
+            case IOException when phase == UpstreamCallPhase.StreamBody:
+                error = StreamIncomplete(upstream);
+                return true;
             case HttpRequestException:
+            case IOException:
                 error = new PipelineError(
                     $"{upstream}.unreachable", $"{upstream} is not reachable.", ErrorKind.UpstreamUnavailable, Source: upstream);
                 return true;
@@ -101,6 +119,12 @@ internal static class UpstreamErrors
                 return false;
         }
     }
+
+    /// <summary>Makes the error for a stream that ended before the answer was complete.</summary>
+    /// <param name="upstream">The name of the upstream.</param>
+    /// <returns>The error.</returns>
+    public static PipelineError StreamIncomplete(string upstream) =>
+        new($"{upstream}.stream_incomplete", $"The stream of {upstream} ended before the answer was complete.", ErrorKind.UpstreamFailed, Source: upstream);
 
     private static TimeSpan? RetryAfterOf(HttpResponseMessage response)
     {

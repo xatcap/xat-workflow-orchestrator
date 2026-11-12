@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Xat.Orchestrator.Infrastructure.Options.Runtime;
 
 /// <summary>The place of the prompt template files.</summary>

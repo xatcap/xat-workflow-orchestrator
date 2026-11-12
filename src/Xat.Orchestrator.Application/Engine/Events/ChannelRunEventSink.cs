@@ -1,7 +1,4 @@
 using System.Threading.Channels;
-using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Runs;
 
 namespace Xat.Orchestrator.Application.Engine.Events;
 
@@ -9,9 +6,18 @@ namespace Xat.Orchestrator.Application.Engine.Events;
 /// <param name="writer">The writer of the channel.</param>
 public sealed class ChannelRunEventSink(ChannelWriter<RunEvent> writer) : IRunEventSink
 {
+    private long _emitted;
+
     /// <inheritdoc/>
     public bool Streaming => true;
 
     /// <inheritdoc/>
-    public ValueTask EmitAsync(RunEvent runEvent, CancellationToken ct) => writer.WriteAsync(runEvent, ct);
+    public long EmittedCount => Interlocked.Read(ref _emitted);
+
+    /// <inheritdoc/>
+    public async ValueTask EmitAsync(RunEvent runEvent, CancellationToken ct)
+    {
+        await writer.WriteAsync(runEvent, ct);
+        Interlocked.Increment(ref _emitted);
+    }
 }

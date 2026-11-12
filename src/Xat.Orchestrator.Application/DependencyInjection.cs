@@ -1,8 +1,11 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Application.Definitions;
 using Xat.Orchestrator.Application.Engine.Execution;
 using Xat.Orchestrator.Application.Engine.Hooks;
 using Xat.Orchestrator.Application.Engine.Registry;
+using Xat.Orchestrator.Application.Engine.Runs;
 using Xat.Orchestrator.Application.Engine.StepContracts;
 using Xat.Orchestrator.Application.Jobs;
 using Xat.Orchestrator.Application.Steps.Citations;
@@ -16,21 +19,34 @@ namespace Xat.Orchestrator.Application;
 /// <summary>Registers the services of the Application layer.</summary>
 public static class DependencyInjection
 {
-    /// <summary>Adds the pipeline engine and the built-in steps to the service collection.</summary>
+    /// <summary>Adds the pipeline engine, the built-in steps and their settings to the service collection.</summary>
     /// <param name="services">The service collection of the host.</param>
+    /// <param name="configuration">The configuration that holds the <c>Runs</c> and <c>Jobs</c> sections. A test can leave it out and set the options in code.</param>
     /// <returns>The same service collection, for chaining.</returns>
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public static IServiceCollection AddApplication(this IServiceCollection services, IConfiguration? configuration = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddOptions<RunnerOptions>();
-        services.AddOptions<JobsOptions>();
+        var runs = services.AddOptions<RunnerOptions>().ValidateOnStart();
+        var jobs = services.AddOptions<JobsOptions>().ValidateOnStart();
+        if (configuration is not null)
+        {
+            runs.Bind(configuration.GetSection(RunnerOptions.SectionName));
+            jobs.Bind(configuration.GetSection(JobsOptions.SectionName));
+        }
+
+        services.AddSingleton<IValidateOptions<RunnerOptions>, RunnerOptionsValidator>();
+        services.AddSingleton<IValidateOptions<JobsOptions>, JobsOptionsValidator>();
         services.AddSingleton<AsyncRunService>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IStepRegistry, StepRegistry>();
         services.AddSingleton<PipelineRunner>();
+        services.AddSingleton<RunStarter>();
         services.AddSingleton<PipelineDefinitionValidator>();
+        // The first middleware is the outer one. So one span covers all the tries of a step.
         services.AddStepMiddleware<StepActivityMiddleware>();
+        services.AddStepMiddleware<IdempotentRetryMiddleware>();
+        services.AddPipelineObserver<RunLogObserver>();
 
         services
             .AddPipelineStep<PromptSystemStep, PromptSystemOptions>(

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Application.Tests.Fakes;
 
@@ -68,6 +69,42 @@ public class InputSchemaValidatorTests
     public void CheckSchema_RejectsUnsupportedKeywords(string schema)
     {
         Assert.NotEmpty(InputSchemaValidator.CheckSchema(TestData.Json(schema)));
+    }
+
+    /// <summary>
+    /// The YAML reader builds the schema with the serializer, which escapes characters such as <c>ç</c> and <c>&amp;</c>.
+    /// The caller sends them as they are. The check compares the values, so the exact value is accepted.
+    /// </summary>
+    [Theory]
+    [InlineData("\"Français\"")]
+    [InlineData("\"a&b\"")]
+    [InlineData("\"it's\"")]
+    [InlineData("1.0")]
+    [InlineData("""{"b":2,"a":1}""")]
+    public void Enum_ComparesValues_NotEscapedText(string input)
+    {
+        var schema = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+        {
+            ["enum"] = new object[] { "Français", "a&b", "it's", 1, new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 } },
+        });
+
+        Assert.Empty(InputSchemaValidator.Validate(schema, TestData.Json(input)));
+    }
+
+    /// <summary>A value that is not in the list is still refused.</summary>
+    [Theory]
+    [InlineData("\"Francais\"")]
+    [InlineData("2")]
+    [InlineData("""{"a":1}""")]
+    [InlineData("true")]
+    public void Enum_RefusesOtherValues(string input)
+    {
+        var schema = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+        {
+            ["enum"] = new object[] { "Français", 1, new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 } },
+        });
+
+        Assert.NotEmpty(InputSchemaValidator.Validate(schema, TestData.Json(input)));
     }
 
     /// <summary>The notes in a schema are allowed.</summary>

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xat.Orchestrator.Application.Engine.Hooks;
@@ -6,14 +5,14 @@ using Xat.Orchestrator.Application.Engine.StepContracts;
 
 namespace Xat.Orchestrator.Application.Engine.Registry;
 
-/// <summary>Registers steps, middleware and hooks. A module calls these methods from its own <c>AddXyz</c> method.</summary>
+/// <summary>Registers steps, middleware and hooks. <see cref="DependencyInjection.AddApplication"/> uses them for the built-in steps.</summary>
 public static class PipelineServiceCollectionExtensions
 {
     /// <summary>Registers a step type. A pipeline file can then use it by name.</summary>
     /// <typeparam name="TStep">The step class.</typeparam>
     /// <typeparam name="TOptions">The class of the options.</typeparam>
     /// <param name="services">The service collection.</param>
-    /// <param name="name">The name that pipeline files use, for example <c>pii.redact</c>.</param>
+    /// <param name="name">The name that pipeline files use, for example <c>rag.retrieve</c>.</param>
     /// <param name="traits">The properties of the step type.</param>
     /// <param name="summary">A short description.</param>
     /// <returns>The same service collection, for chaining.</returns>

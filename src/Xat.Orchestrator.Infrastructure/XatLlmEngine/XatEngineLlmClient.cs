@@ -13,8 +13,9 @@ namespace Xat.Orchestrator.Infrastructure.XatLlmEngine;
 /// <summary>
 /// The adapter to xat-llm-engine. The engine accepts the OpenAI chat format, but it refuses a top-level field that the provider
 /// does not list. So the adapter writes the request by hand and sends only the fields that the model profile allows.
+/// The adapter is a singleton. It gets a client from the factory for each call, so the factory can renew the handlers.
 /// </summary>
-internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
+internal sealed class XatEngineLlmClient(IHttpClientFactory factory) : ILlmClient
 {
     private const string Name = "xat-llm-engine";
 
@@ -22,6 +23,7 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
     public async Task<Result<Completion>> CompleteAsync(LlmRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var http = factory.CreateClient(DependencyInjection.XatLlmEngineClient);
         try
         {
             using var content = BuildRequest(request, stream: false);
@@ -58,6 +60,7 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        using var http = factory.CreateClient(DependencyInjection.XatLlmEngineClient);
         HttpResponseMessage? response = null;
         PipelineError? failure = null;
         try
@@ -90,26 +93,33 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
 
         using (response)
         {
-            await using var stream = await response!.Content.ReadAsStreamAsync(ct);
-            using var reader = new StreamReader(stream, Encoding.UTF8);
+            Stream? stream = null;
+            try
+            {
+                stream = await response!.Content.ReadAsStreamAsync(ct);
+            }
+            catch (Exception exception) when (UpstreamErrors.TryMap(exception, Name, ct, out var error, UpstreamCallPhase.StreamBody))
+            {
+                failure = error;
+            }
+
+            if (failure is not null)
+            {
+                yield return Result<CompletionDelta>.Fail(failure);
+                yield break;
+            }
+
+            await using var body = stream!;
+            using var reader = new StreamReader(body, Encoding.UTF8);
             var finished = false;
             var sawFinishReason = false;
 
             while (true)
             {
-                string? line = null;
-                try
+                var (line, readError) = await ReadLineAsync(reader, ct);
+                if (readError is not null)
                 {
-                    line = await reader.ReadLineAsync(ct);
-                }
-                catch (Exception exception) when (UpstreamErrors.TryMap(exception, Name, ct, out var error))
-                {
-                    failure = error;
-                }
-
-                if (failure is not null)
-                {
-                    yield return Result<CompletionDelta>.Fail(failure);
+                    yield return Result<CompletionDelta>.Fail(readError);
                     yield break;
                 }
 
@@ -119,7 +129,7 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
                 }
 
                 // A comment line, for example ": keep-alive", and an empty line between events carry no data.
-                if (line.Length == 0 || line[0] == ':' || !line.StartsWith("data:", StringComparison.Ordinal))
+                if (!line.StartsWith("data:", StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -145,9 +155,20 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
             // The engine ends a failed stream with an error event and no [DONE]. A stream that ends with neither is cut off.
             if (!finished && !sawFinishReason)
             {
-                yield return Result<CompletionDelta>.Fail(new PipelineError(
-                    $"{Name}.stream_incomplete", $"The stream of {Name} ended before the answer was complete.", ErrorKind.UpstreamFailed, Source: Name));
+                yield return Result<CompletionDelta>.Fail(UpstreamErrors.StreamIncomplete(Name));
             }
+        }
+    }
+
+    private static async Task<(string? Line, PipelineError? Error)> ReadLineAsync(StreamReader reader, CancellationToken ct)
+    {
+        try
+        {
+            return (await reader.ReadLineAsync(ct), null);
+        }
+        catch (Exception exception) when (UpstreamErrors.TryMap(exception, Name, ct, out var error, UpstreamCallPhase.StreamBody))
+        {
+            return (null, error);
         }
     }
 
@@ -177,16 +198,12 @@ internal sealed class XatEngineLlmClient(HttpClient http) : ILlmClient
             body["temperature"] = temperature;
         }
 
-        if (request.MaxTokens is { } maxTokens)
+        var tokenField = allowed.Contains("max_tokens") ? "max_tokens"
+            : allowed.Contains("max_completion_tokens") ? "max_completion_tokens"
+            : null;
+        if (request.MaxTokens is { } maxTokens && tokenField is not null)
         {
-            if (allowed.Contains("max_tokens"))
-            {
-                body["max_tokens"] = maxTokens;
-            }
-            else if (allowed.Contains("max_completion_tokens"))
-            {
-                body["max_completion_tokens"] = maxTokens;
-            }
+            body[tokenField] = maxTokens;
         }
 
         if (stream && allowed.Contains("stream_options"))

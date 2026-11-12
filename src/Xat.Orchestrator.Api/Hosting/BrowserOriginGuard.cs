@@ -7,7 +7,7 @@ namespace Xat.Orchestrator.Api.Hosting;
 /// Refuses every request that has an <c>Origin</c> header. A browser adds this header to a request that a web page makes.
 /// The orchestrator has no authentication, so a web page in the browser of the user could otherwise call it, for example with
 /// a simple cross-site POST that needs no preflight and wipes the index of a RAG. xat-rag has the same rule for the same reason.
-/// Programs, such as curl and the OpenAI client libraries for servers, send no <c>Origin</c> header, so they are not affected.
+/// Programs, such as curl and HTTP client libraries for servers, send no <c>Origin</c> header, so they are not affected.
 /// </summary>
 internal sealed class BrowserOriginGuard(RequestDelegate next)
 {

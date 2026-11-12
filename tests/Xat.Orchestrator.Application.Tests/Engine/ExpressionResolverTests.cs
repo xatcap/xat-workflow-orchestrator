@@ -67,7 +67,7 @@ public class ExpressionResolverTests
     public void StepOutput_CanBeRead()
     {
         var state = State();
-        state.SetOutput("retrieve", new Dictionary<string, object?> { ["count"] = 4 });
+        state.SetOutput("retrieve", StepOutputs.Count, 4);
 
         Assert.Equal("""{"n":4}""", Resolve("""{"n":"${steps.retrieve.count}"}""", state));
     }
@@ -77,7 +77,7 @@ public class ExpressionResolverTests
     public void StepOutput_OfAComplexType_IsAnError()
     {
         var state = State();
-        state.SetOutput("retrieve", new Dictionary<string, object?> { ["chunks"] = new List<int> { 1 } });
+        state.SetOutput("retrieve", new StateKey<List<int>>("chunks"), [1]);
 
         var result = ExpressionResolver.Resolve(TestData.Json("""{"n":"${steps.retrieve.chunks}"}"""), state);
 

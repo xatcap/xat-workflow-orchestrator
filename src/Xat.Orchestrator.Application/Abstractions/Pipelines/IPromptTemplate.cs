@@ -1,5 +1,3 @@
-using Xat.Orchestrator.Domain.Errors;
-
 namespace Xat.Orchestrator.Application.Abstractions.Pipelines;
 
 /// <summary>A prompt template that can be filled with data.</summary>

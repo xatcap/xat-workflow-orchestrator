@@ -9,5 +9,6 @@ internal sealed class RetrievalProfileOptions
     public string Context { get; init; } = string.Empty;
 
     /// <summary>Gets the default number of chunks.</summary>
+    [Range(1, 100, ErrorMessage = "must be from 1 to 100.")]
     public int Chunks { get; init; } = 8;
 }

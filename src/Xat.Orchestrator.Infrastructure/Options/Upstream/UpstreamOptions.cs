@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Xat.Orchestrator.Infrastructure.Options.Upstream;
 
 /// <summary>The settings of the two upstream services.</summary>

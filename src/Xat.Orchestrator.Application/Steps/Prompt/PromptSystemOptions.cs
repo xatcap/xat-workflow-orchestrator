@@ -1,7 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.Text.RegularExpressions;
-using Xat.Orchestrator.Domain.Errors;
-
 namespace Xat.Orchestrator.Application.Steps.Prompt;
 
 /// <summary>The options of <see cref="PromptSystemStep"/>.</summary>

@@ -81,24 +81,13 @@ public sealed partial class PipelineDefinitionValidator(
                 streams |= registration.Traits.HasFlag(StepTraits.Streams);
 
                 var context = new StepValidationContext(profiles, models, templates, earlier);
-                foreach (var problem in registration.Validate(step.With, context))
-                {
-                    Add($"step '{step.Id}': {problem}");
-                }
+                messages.AddRange(registration.Validate(step.With, context).Select(problem => $"Pipeline '{definition.Name}': step '{step.Id}': {problem}"));
             }
 
-            foreach (var path in ExpressionResolver.FindPaths(step.With))
-            {
-                var parts = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (parts.Length == 0 || (parts[0] != "input" && parts[0] != "steps"))
-                {
-                    Add($"step '{step.Id}': the expression path '{path}' must start with 'input.' or 'steps.'.");
-                }
-                else if (parts[0] == "steps" && (parts.Length != 3 || !earlier.Contains(parts[1])))
-                {
-                    Add($"step '{step.Id}': the expression path '{path}' must have the form steps.<id>.<name> and name an earlier step.");
-                }
-            }
+            messages.AddRange(ExpressionResolver.FindPaths(step.With)
+                .Select(path => (Path: path, Reason: ExpressionPath.Check(path, earlier)))
+                .Where(check => check.Reason is not null)
+                .Select(check => $"Pipeline '{definition.Name}': step '{step.Id}': the expression path '{check.Path}' {check.Reason}."));
 
             earlier.Add(step.Id);
         }

@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Xat.Orchestrator.Infrastructure.Options.Llm;
 
 /// <summary>The model aliases. A new model needs only a new entry here.</summary>

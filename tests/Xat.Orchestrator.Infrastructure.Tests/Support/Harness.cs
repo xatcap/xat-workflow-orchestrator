@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WireMock.Server;
 using Xat.Orchestrator.Application;
-using Xat.Orchestrator.Infrastructure;
 
 namespace Xat.Orchestrator.Infrastructure.Tests.Support;
 
@@ -38,7 +37,7 @@ internal sealed class Harness : IDisposable
         services.AddLogging();
         if (withApplication)
         {
-            services.AddApplication();
+            services.AddApplication(Configuration);
         }
 
         services.AddInfrastructure(Configuration);

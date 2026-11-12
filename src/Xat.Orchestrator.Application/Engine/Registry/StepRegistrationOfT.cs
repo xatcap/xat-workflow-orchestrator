@@ -1,6 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xat.Orchestrator.Application.Engine.Execution;
 using Xat.Orchestrator.Application.Engine.StepContracts;
 
@@ -21,13 +19,15 @@ internal sealed class StepRegistration<TStep, TOptions>(string name, StepTraits 
 
     public IReadOnlyList<string> Validate(JsonElement stepOptions, StepValidationContext context)
     {
-        var bound = StepOptionsBinder.Bind<TOptions>(stepOptions);
+        var (bound, deferred) = StepOptionsBinder.BindForValidation<TOptions>(stepOptions);
         if (!bound.IsSuccess)
         {
             return [bound.Error.Message];
         }
 
-        return step is IStepValidator<TOptions> validator ? validator.Validate(bound.Value, context) : [];
+        return step is IStepValidator<TOptions> validator
+            ? validator.Validate(bound.Value, context with { DeferredOptions = deferred })
+            : [];
     }
 
     public ValueTask<StepOutcome> ExecuteAsync(StepContext context, JsonElement resolvedWith, CancellationToken ct)

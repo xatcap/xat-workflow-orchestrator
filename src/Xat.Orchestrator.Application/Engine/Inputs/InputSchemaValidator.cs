@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Xat.Orchestrator.Domain.Errors;
 
 namespace Xat.Orchestrator.Application.Engine.Inputs;
 
@@ -29,6 +30,16 @@ public static class InputSchemaValidator
         var messages = new List<string>();
         CheckSchema(schema, "input schema", messages);
         return messages;
+    }
+
+    /// <summary>Checks the input of a caller and makes the error that both run modes return.</summary>
+    /// <param name="schema">The input schema of the pipeline.</param>
+    /// <param name="input">The input of the caller.</param>
+    /// <returns>The <c>input.invalid</c> error, or <see langword="null"/> when the input is valid.</returns>
+    public static PipelineError? Check(JsonElement schema, JsonElement input)
+    {
+        var problems = Validate(schema, input);
+        return problems.Count == 0 ? null : new PipelineError("input.invalid", string.Join(" ", problems), ErrorKind.Validation);
     }
 
     /// <summary>Checks a value against a schema.</summary>
@@ -90,7 +101,7 @@ public static class InputSchemaValidator
         }
 
         if (schema.TryGetProperty("enum", out var allowed) && allowed.ValueKind == JsonValueKind.Array
-            && !allowed.EnumerateArray().Any(item => item.GetRawText() == value.GetRawText()))
+            && !allowed.EnumerateArray().Any(item => JsonValues.AreEqual(item, value)))
         {
             messages.Add($"{path}: the value is not one of the allowed values.");
         }

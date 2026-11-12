@@ -9,25 +9,38 @@ namespace Xat.Orchestrator.Infrastructure.Definitions;
 
 /// <summary>
 /// Loads all pipelines from the YAML files of a folder and checks them. A new file in the folder is a new pipeline,
-/// and it shows in the list of pipelines after a restart. The service does not start when a file is not valid.
+/// and it shows in the list of pipelines after a restart. The files are read once, at the first use.
+/// The start calls <see cref="Validate"/>, and it stops when a file is not valid.
 /// </summary>
-internal sealed class YamlPipelineCatalog : IPipelineCatalog
+internal sealed class YamlPipelineCatalog(IOptions<PipelinesOptions> options, PipelineDefinitionValidator validator) : IPipelineCatalog
 {
-    private readonly Dictionary<string, PipelineDefinition> _pipelines = new(StringComparer.Ordinal);
+    private readonly Lazy<Loaded> _loaded = new(() => Load(options.Value.Folder, validator));
 
-    /// <summary>Initializes a new instance of the <see cref="YamlPipelineCatalog"/> class.</summary>
-    /// <param name="options">The options with the pipeline folder.</param>
-    /// <param name="validator">The validator for the definitions.</param>
+    /// <inheritdoc/>
+    public IReadOnlyCollection<PipelineDefinition> All => Pipelines().Values;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> Validate() => _loaded.Value.Problems;
+
+    /// <inheritdoc/>
+    public Result<PipelineDefinition> Find(string name) =>
+        Pipelines().TryGetValue(name, out var pipeline)
+            ? Result<PipelineDefinition>.Ok(pipeline)
+            : Result<PipelineDefinition>.Fail(new PipelineError(
+                "pipeline.not_found", "The pipeline does not exist.", ErrorKind.NotFound));
+
+    /// <summary>Gets the pipelines. The start checks the files first, so a request never sees a catalog with problems.</summary>
     /// <exception cref="ConfigurationFilesException">A file or a definition is not valid.</exception>
-    public YamlPipelineCatalog(IOptions<PipelinesOptions> options, PipelineDefinitionValidator validator)
-    {
-        var folder = Path.IsPathRooted(options.Value.Folder)
-            ? options.Value.Folder
-            : Path.Combine(AppContext.BaseDirectory, options.Value.Folder);
+    private Dictionary<string, PipelineDefinition> Pipelines() =>
+        _loaded.Value.Problems.Count == 0 ? _loaded.Value.Pipelines : throw new ConfigurationFilesException(_loaded.Value.Problems);
 
+    private static Loaded Load(string configuredFolder, PipelineDefinitionValidator validator)
+    {
+        var folder = Path.IsPathRooted(configuredFolder) ? configuredFolder : Path.Combine(AppContext.BaseDirectory, configuredFolder);
+        var pipelines = new Dictionary<string, PipelineDefinition>(StringComparer.Ordinal);
         if (!Directory.Exists(folder))
         {
-            throw new ConfigurationFilesException([$"The pipeline folder '{options.Value.Folder}' does not exist."]);
+            return new Loaded(pipelines, [$"The pipeline folder '{configuredFolder}' does not exist."]);
         }
 
         var problems = new List<string>();
@@ -45,30 +58,19 @@ internal sealed class YamlPipelineCatalog : IPipelineCatalog
             }
 
             problems.AddRange(validator.Validate(read.Value));
-            if (!_pipelines.TryAdd(read.Value.Name, read.Value))
+            if (!pipelines.TryAdd(read.Value.Name, read.Value))
             {
                 problems.Add($"{Path.GetFileName(file)}: a pipeline with the name '{read.Value.Name}' exists already.");
             }
         }
 
-        if (problems.Count == 0 && _pipelines.Count == 0)
+        if (problems.Count == 0 && pipelines.Count == 0)
         {
-            problems.Add($"The pipeline folder '{options.Value.Folder}' has no pipeline file.");
+            problems.Add($"The pipeline folder '{configuredFolder}' has no pipeline file.");
         }
 
-        if (problems.Count > 0)
-        {
-            throw new ConfigurationFilesException(problems);
-        }
+        return new Loaded(pipelines, problems);
     }
 
-    /// <inheritdoc/>
-    public IReadOnlyCollection<PipelineDefinition> All => _pipelines.Values;
-
-    /// <inheritdoc/>
-    public Result<PipelineDefinition> Find(string name) =>
-        _pipelines.TryGetValue(name, out var pipeline)
-            ? Result<PipelineDefinition>.Ok(pipeline)
-            : Result<PipelineDefinition>.Fail(new PipelineError(
-                "pipeline.not_found", "The pipeline does not exist.", ErrorKind.NotFound));
+    private sealed record Loaded(Dictionary<string, PipelineDefinition> Pipelines, IReadOnlyList<string> Problems);
 }

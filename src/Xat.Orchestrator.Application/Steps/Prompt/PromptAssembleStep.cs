@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Xat.Orchestrator.Application.Engine.Execution;
 using Xat.Orchestrator.Application.Engine.State;
 using Xat.Orchestrator.Application.Engine.StepContracts;
@@ -31,9 +30,7 @@ public sealed class PromptAssembleStep : IPipelineStep<PromptAssembleOptions>
         var chunkLists = new Dictionary<string, IReadOnlyList<Chunk>>(StringComparer.Ordinal);
         foreach (var section in sections.Where(section => section.Kind == PromptSectionKind.Chunks))
         {
-            if (!state.TryGetOutput(section.SourceStepId!, out var output)
-                || !output.TryGetValue("chunks", out var chunks)
-                || chunks is not IReadOnlyList<Chunk> list)
+            if (!state.TryGetOutput(section.SourceStepId!, StepOutputs.Chunks, out var list))
             {
                 return Done(StepOutcome.Fail(new PipelineError(
                     "prompt.chunks_missing", $"The step '{section.SourceStepId}' has no chunks.", ErrorKind.Validation, Source: stepId)));
@@ -43,21 +40,19 @@ public sealed class PromptAssembleStep : IPipelineStep<PromptAssembleOptions>
         }
 
         var hasUntrusted = sections.Any(section => section.Kind == PromptSectionKind.Chunks || !section.Trusted);
-        var sources = new Dictionary<int, Chunk>();
-        var renderedChunks = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var number = 1;
-        foreach (var section in sections.Where(section => section.Kind == PromptSectionKind.Chunks))
-        {
-            var rendered = new List<string>();
-            foreach (var chunk in chunkLists[section.Name])
-            {
-                rendered.Add(PromptFormatting.RenderChunk(number, chunk));
-                sources[number] = chunk;
-                number++;
-            }
-
-            renderedChunks[section.Name] = rendered;
-        }
+        // The sources get one number each, across all chunk sections, in the order of the prompt.
+        var numbered = sections
+            .Where(section => section.Kind == PromptSectionKind.Chunks)
+            .SelectMany(section => chunkLists[section.Name].Select(chunk => (Section: section.Name, Chunk: chunk)))
+            .Select((item, index) => (item.Section, item.Chunk, Number: index + 1))
+            .ToList();
+        var sources = numbered.ToDictionary(item => item.Number, item => item.Chunk);
+        var renderedChunks = sections
+            .Where(section => section.Kind == PromptSectionKind.Chunks)
+            .ToDictionary(
+                section => section.Name,
+                section => numbered.Where(item => item.Section == section.Name).Select(item => PromptFormatting.RenderChunk(item.Number, item.Chunk)).ToList(),
+                StringComparer.Ordinal);
 
         var parts = new List<string>();
         foreach (var section in sections)

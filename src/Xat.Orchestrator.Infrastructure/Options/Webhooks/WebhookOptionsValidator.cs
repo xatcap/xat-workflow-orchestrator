@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Xat.Orchestrator.Application.Configuration;
 
 namespace Xat.Orchestrator.Infrastructure.Options.Webhooks;
 
@@ -9,20 +10,7 @@ internal sealed class WebhookOptionsValidator : IValidateOptions<WebhookOptions>
     public ValidateOptionsResult Validate(string? name, WebhookOptions options)
     {
         var failures = new List<string>();
-        if (options.TimeoutSeconds is < 1 or > 120)
-        {
-            failures.Add($"{WebhookOptions.SectionName}:TimeoutSeconds must be from 1 to 120.");
-        }
-
-        if (options.RetryCount is < 0 or > 10)
-        {
-            failures.Add($"{WebhookOptions.SectionName}:RetryCount must be from 0 to 10.");
-        }
-
-        if (options.RetryDelayMilliseconds is < 0 or > 60_000)
-        {
-            failures.Add($"{WebhookOptions.SectionName}:RetryDelayMilliseconds must be from 0 to 60000.");
-        }
+        OptionRules.Check(options, WebhookOptions.SectionName, failures);
 
         if (options.AllowedHosts.Any(string.IsNullOrWhiteSpace))
         {

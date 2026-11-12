@@ -44,6 +44,36 @@ public class PipelineRunnerTests
         Assert.Equal(["system", "user", "retrieve", "none", "assemble", "generate", "cite"], result.Value.Steps.Select(step => step.StepId));
     }
 
+    /// <summary>A number option with one expression gets the value of the caller. A value out of range fails the run with step.options_invalid.</summary>
+    [Theory]
+    [InlineData("""{"prompt":"Which port?","n":3}""", true)]
+    [InlineData("""{"prompt":"Which port?","n":500}""", false)]
+    public async Task NumberOptionFromInput_IsBoundAndCheckedAtRunTime(string input, bool succeeds)
+    {
+        var rag = new FakeRetrievalClient();
+        using var services = TestHost.Build(rag);
+        var pipeline = TestData.Pipeline(
+            "t",
+            [
+                TestData.Step("user", "prompt.user", """{"text":"${input.prompt}"}"""),
+                TestData.Step("retrieve", "rag.retrieve", """{"profile":"default","chunks":"${input.n}"}"""),
+                TestData.Step("assemble", "prompt.assemble"),
+                TestData.Step("generate", "llm.generate"),
+            ]);
+
+        var result = await Start(services, pipeline, input).Completion;
+
+        Assert.Equal(succeeds, result.IsSuccess);
+        if (succeeds)
+        {
+            Assert.Equal(3, Assert.Single(rag.Queries).Chunks);
+        }
+        else
+        {
+            Assert.Equal("step.options_invalid", result.Error!.Code);
+        }
+    }
+
     /// <summary>The retrieve step asks xat-rag with the context of the profile and the prompt of the caller.</summary>
     [Fact]
     public async Task Retrieve_UsesTheProfileContextAndThePrompt()

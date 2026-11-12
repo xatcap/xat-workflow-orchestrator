@@ -100,6 +100,20 @@ public static partial class ExpressionResolver
         }
     }
 
+    /// <summary>Shows whether a text holds an expression. The value of such a text is known only when the run starts.</summary>
+    /// <param name="text">The text, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the text holds at least one expression.</returns>
+    public static bool IsExpression(string? text) => text is not null && ExpressionPattern().IsMatch(text);
+
+    /// <summary>Shows whether a text is exactly one expression. Such a text keeps the type of the value, for example a number.</summary>
+    /// <param name="text">The text.</param>
+    /// <returns><see langword="true"/> when the whole text is one expression.</returns>
+    public static bool IsSingleExpression(string text)
+    {
+        var matches = ExpressionPattern().Matches(text);
+        return matches.Count == 1 && matches[0].Length == text.Length;
+    }
+
     private static JsonNode? ResolveString(string text, PipelineState state, ResolveContext context)
     {
         var matches = ExpressionPattern().Matches(text);
@@ -109,7 +123,7 @@ public static partial class ExpressionResolver
         }
 
         // A text that is one expression keeps the type of the value, for example a number or an object.
-        if (matches.Count == 1 && matches[0].Length == text.Length)
+        if (IsSingleExpression(text))
         {
             return Evaluate(matches[0].Groups[1].Value, state, context);
         }
@@ -130,21 +144,13 @@ public static partial class ExpressionResolver
     private static JsonNode? Evaluate(string expression, PipelineState state, ResolveContext context)
     {
         var (path, fallback) = SplitDefault(expression);
-        if (state.TryLookup(path, out var value) && value is not null)
+        var node = state.TryLookup(path, out var value) && value is not null ? ToNode(value, path, context) : null;
+        if (context.Error is not null)
         {
-            var node = ToNode(value, path, context);
-            if (context.Error is not null)
-            {
-                return null;
-            }
-
-            if (node is not null)
-            {
-                return node;
-            }
+            return null;
         }
 
-        return fallback is null ? null : JsonValue.Create(fallback);
+        return node ?? (fallback is null ? null : JsonValue.Create(fallback));
     }
 
     private static JsonNode? ToNode(object value, string path, ResolveContext context)

@@ -1,6 +1,6 @@
-using System.ComponentModel.DataAnnotations;
 using Xat.Orchestrator.Application.Abstractions.Retrieval;
 using Xat.Orchestrator.Application.Engine.Execution;
+using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Application.Engine.State;
 using Xat.Orchestrator.Application.Engine.StepContracts;
 using Xat.Orchestrator.Domain.Errors;
@@ -22,12 +22,7 @@ public sealed class RetrieveStep(IRetrievalClient retrieval, IRetrievalProfiles 
         var profile = profiles.Resolve(options.Profile!);
         if (!profile.IsSuccess)
         {
-            // The alias can come from the input of the caller. So the message does not repeat it, and the class is Validation.
-            return StepOutcome.Fail(new PipelineError(
-                "retrieve.profile_unknown",
-                "The retrieval profile is not configured. Use GET /v1/contexts to list the profiles.",
-                ErrorKind.Validation,
-                Source: stepId));
+            return StepOutcome.Fail(profile.Error with { Source = stepId });
         }
 
         var query = options.Query ?? state.Prompt.User;
@@ -50,25 +45,23 @@ public sealed class RetrieveStep(IRetrievalClient retrieval, IRetrievalProfiles 
             return StepOutcome.Fail(result.Error with { Source = result.Error.Source ?? stepId });
         }
 
-        state.SetOutput(stepId, new Dictionary<string, object?>
-        {
-            ["chunks"] = result.Value.Chunks,
-            ["count"] = result.Value.Chunks.Count,
-            ["omitted"] = result.Value.OmittedCount,
-        });
-        state.Prompt.AddSection(new PromptSection(stepId, PromptSectionKind.Chunks, null, stepId, Trusted: false));
+        state.SetOutput(stepId, StepOutputs.Chunks, result.Value.Chunks);
+        state.SetOutput(stepId, StepOutputs.Count, result.Value.Chunks.Count);
+        state.SetOutput(stepId, StepOutputs.Omitted, result.Value.OmittedCount);
+        state.Prompt.AddSection(PromptSection.ForChunks(stepId));
         return StepOutcome.Continue;
     }
 
     /// <inheritdoc/>
     public IReadOnlyList<string> Validate(RetrieveOptions options, StepValidationContext context)
     {
-        if (options.Profile is null || options.Profile.Contains("${", StringComparison.Ordinal))
+        if (options.Profile is null || ExpressionResolver.IsExpression(options.Profile))
         {
             return [];
         }
 
+        // The alias comes from the pipeline file here, not from a caller, so the message can name it.
         var profile = context.Profiles.Resolve(options.Profile);
-        return profile.IsSuccess ? [] : [profile.Error.Message];
+        return profile.IsSuccess ? [] : [$"{profile.Error.Message} The alias is '{options.Profile}'."];
     }
 }

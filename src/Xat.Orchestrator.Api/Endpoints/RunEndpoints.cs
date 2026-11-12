@@ -3,9 +3,7 @@ using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Api.Contracts;
 using Xat.Orchestrator.Api.Contracts.Runs;
 using Xat.Orchestrator.Api.Errors;
-using Xat.Orchestrator.Application.Abstractions.Pipelines;
 using Xat.Orchestrator.Application.Engine.Events;
-using Xat.Orchestrator.Application.Engine.Execution;
 using Xat.Orchestrator.Application.Engine.Runs;
 using Xat.Orchestrator.Application.Jobs;
 using Xat.Orchestrator.Domain.Errors;
@@ -21,22 +19,21 @@ internal static class RunEndpoints
     /// <returns>The same route builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapRunEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/pipelines/{name}/runs", (string name, HttpContext http) => RunAsync(name, http))
+        app.MapPost("/v1/pipelines/{name}/runs", (string name, HttpContext http, RunStarter starter, AsyncRunService runs) =>
+                RunAsync(name, http, starter, runs))
             .RequireRateLimiting(RunRules.RateLimitPolicy);
 
-        app.MapPost("/v1/ask", (HttpContext http, IOptions<ApiOptions> options) => RunAsync(options.Value.DefaultPipeline, http))
+        app.MapPost("/v1/ask", (HttpContext http, IOptions<ApiOptions> options, RunStarter starter, AsyncRunService runs) =>
+                RunAsync(options.Value.DefaultPipeline, http, starter, runs))
             .RequireRateLimiting(RunRules.RateLimitPolicy);
 
         return app;
     }
 
-    private static async Task RunAsync(string name, HttpContext http)
+    private static async Task RunAsync(string name, HttpContext http, RunStarter starter, AsyncRunService runs)
     {
         var ct = http.RequestAborted;
-        var catalog = http.RequestServices.GetRequiredService<IPipelineCatalog>();
-        var runner = http.RequestServices.GetRequiredService<PipelineRunner>();
-
-        var pipeline = catalog.Find(name);
+        var pipeline = starter.Find(name);
         if (!pipeline.IsSuccess)
         {
             await ApiErrors.WriteAsync(http, pipeline.Error, null, ct);
@@ -64,7 +61,7 @@ internal static class RunEndpoints
 
         if (mode == "async")
         {
-            await SubmitAsync(http, pipeline.Value, request, ct);
+            await SubmitAsync(http, runs, pipeline.Value, request, ct);
             return;
         }
 
@@ -78,19 +75,19 @@ internal static class RunEndpoints
             return;
         }
 
-        var streamError = RunRules.CheckStreamMode(pipeline.Value, request.Stream);
-        if (streamError is not null)
-        {
-            await ApiErrors.WriteAsync(http, streamError, null, ct);
-            return;
-        }
-
         var input = request.Input ?? JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
 
         // The run has its own token. The stream loop cancels it when the loop ends for any reason, so a failed write
         // never leaves a run that goes on and holds the model while nobody reads its events.
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var handle = runner.Start(pipeline.Value, input, new RunRequest(request.Stream), runCts.Token);
+        var started = starter.Start(pipeline.Value, input, request.Stream, runCts.Token);
+        if (!started.IsSuccess)
+        {
+            await ApiErrors.WriteAsync(http, started.Error, null, ct);
+            return;
+        }
+
+        var handle = started.Value;
         http.Response.Headers["X-Run-Id"] = handle.RunId;
 
         if (request.Stream)
@@ -118,22 +115,11 @@ internal static class RunEndpoints
     }
 
     /// <summary>Accepts an asynchronous run. The answer is 202 with the ID of the run and the path of its state.</summary>
-    private static async Task SubmitAsync(HttpContext http, PipelineDefinition pipeline, RunRequestDto request, CancellationToken ct)
+    private static async Task SubmitAsync(
+        HttpContext http, AsyncRunService runs, PipelineDefinition pipeline, RunRequestDto request, CancellationToken ct)
     {
-        if (request.Stream)
-        {
-            await ApiErrors.WriteAsync(
-                http,
-                new PipelineError("stream.not_supported_async", "An asynchronous run does not stream. Set stream to false.", ErrorKind.Validation),
-                null,
-                ct);
-            return;
-        }
-
-        // A pipeline that always streams cannot run in asynchronous mode. The service checks this too, but the error is clearer here.
-        var runs = http.RequestServices.GetRequiredService<AsyncRunService>();
         var input = request.Input ?? JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
-        var accepted = runs.Submit(pipeline, input, request.Webhook, request.Debug);
+        var accepted = runs.Submit(pipeline, input, request.Webhook, request.Debug, request.Stream);
         if (!accepted.IsSuccess)
         {
             await ApiErrors.WriteAsync(http, accepted.Error, null, ct);

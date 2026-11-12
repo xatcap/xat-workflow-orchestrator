@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Xat.Orchestrator.Infrastructure.Options.Retrieval;
 
 /// <summary>The retrieval aliases. A new context needs only a new entry here.</summary>

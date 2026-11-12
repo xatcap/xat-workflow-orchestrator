@@ -2,7 +2,6 @@ using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Retrieval;
 using Xat.Orchestrator.Infrastructure.Options.Llm;
 
 namespace Xat.Orchestrator.Infrastructure.Catalogs;
@@ -31,6 +30,7 @@ internal sealed class ConfigModelCatalog : IModelCatalog
     public string DefaultAlias { get; }
 
     /// <inheritdoc/>
+    /// <remarks>The alias can come from the input of the caller, so the error does not repeat it.</remarks>
     public Result<ModelProfile> Resolve(string? modelAlias)
     {
         var alias = string.IsNullOrWhiteSpace(modelAlias) ? DefaultAlias : modelAlias;
@@ -38,7 +38,7 @@ internal sealed class ConfigModelCatalog : IModelCatalog
             ? Result<ModelProfile>.Ok(model)
             : Result<ModelProfile>.Fail(new PipelineError(
                 "llm.model_unknown",
-                $"The model alias '{alias}' is not configured. Add it to {LlmOptions.SectionName}:Models.",
-                ErrorKind.NotFound));
+                $"The model alias is not configured. Add it to {LlmOptions.SectionName}:Models.",
+                ErrorKind.Validation));
     }
 }

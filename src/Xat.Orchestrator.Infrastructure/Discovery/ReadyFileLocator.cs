@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Domain.Errors;
@@ -25,30 +24,18 @@ internal sealed class ReadyFileLocator(IOptions<UpstreamOptions> options) : IUps
 
         var name = UpstreamNames.Of(upstream);
         var endpoint = upstream == Upstream.XatRag ? options.Value.XatRag : options.Value.XatLlmEngine;
-        string? text = endpoint.BaseUrl;
+        var (text, problem) = string.IsNullOrWhiteSpace(endpoint.BaseUrl)
+            ? await ReadUrlAsync(endpoint.ReadyFile, name, ct)
+            : (endpoint.BaseUrl, null);
 
-        if (string.IsNullOrWhiteSpace(text))
+        if (problem is not null)
         {
-            if (string.IsNullOrWhiteSpace(endpoint.ReadyFile) || !File.Exists(endpoint.ReadyFile))
-            {
-                return Unknown(name, $"The ready file of {name} does not exist. Start {name}.");
-            }
-
-            try
-            {
-                var json = await File.ReadAllTextAsync(endpoint.ReadyFile, ct);
-                using var document = JsonDocument.Parse(json);
-                text = document.RootElement.TryGetProperty("url", out var url) ? url.GetString() : null;
-            }
-            catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
-            {
-                return Unknown(name, $"The ready file of {name} cannot be read.");
-            }
+            return Unknown(name, problem);
         }
 
         if (text is null || !LoopbackUrl.TryParse(text, out var uri))
         {
-            return Unknown(name, $"The address of {name} is not a loopback http address.");
+            return Unknown(name, $"The address of {name} is not a loopback http or https address with no path.");
         }
 
         _cache[upstream] = uri;
@@ -57,6 +44,31 @@ internal sealed class ReadyFileLocator(IOptions<UpstreamOptions> options) : IUps
 
     /// <inheritdoc/>
     public void Invalidate(Upstream upstream) => _cache.TryRemove(upstream, out _);
+
+    /// <summary>Reads the <c>url</c> field of a ready file. A file with a different shape counts as a file that cannot be read.</summary>
+    private static async Task<(string? Url, string? Problem)> ReadUrlAsync(string? path, string name, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return (null, $"The ready file of {name} does not exist. Start {name}.");
+        }
+
+        var unreadable = $"The ready file of {name} cannot be read.";
+        try
+        {
+            var json = await File.ReadAllTextAsync(path, ct);
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            var hasUrl = root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("url", out var url)
+                && url.ValueKind == JsonValueKind.String;
+            return hasUrl ? (root.GetProperty("url").GetString(), null) : (null, unreadable);
+        }
+        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return (null, unreadable);
+        }
+    }
 
     private static Result<Uri> Unknown(string name, string message) =>
         Result<Uri>.Fail(new PipelineError($"{name}.not_located", message, ErrorKind.UpstreamUnavailable, Source: name));

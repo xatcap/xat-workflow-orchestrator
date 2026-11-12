@@ -53,13 +53,14 @@ internal sealed class FluidPromptTemplateStore : IPromptTemplateStore
     }
 
     /// <inheritdoc/>
+    /// <remarks>The name can come from the input of the caller, so the error does not repeat it.</remarks>
     public Result<IPromptTemplate> Find(string reference) =>
         _templates.TryGetValue(reference, out var template)
             ? Result<IPromptTemplate>.Ok(template)
             : Result<IPromptTemplate>.Fail(new PipelineError(
                 "template.unknown",
-                $"The prompt template '{reference}' does not exist. A template file is named name@version.liquid.",
-                ErrorKind.NotFound));
+                "The prompt template does not exist. A template file is named name@version.liquid.",
+                ErrorKind.Validation));
 
     private sealed class FluidTemplate(IFluidTemplate template) : IPromptTemplate
     {

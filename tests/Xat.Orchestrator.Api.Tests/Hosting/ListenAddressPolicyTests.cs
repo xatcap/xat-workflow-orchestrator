@@ -61,4 +61,34 @@ public class ListenAddressPolicyTests
         Assert.Throws<InvalidOperationException>(
             () => ListenAddressPolicy.EnsureLoopbackOnly(["http://127.0.0.1:8430", "http://0.0.0.0:8431"]));
     }
+
+    /// <summary>The check of the settings reads urls, the Kestrel endpoints and the port settings, before the server binds.</summary>
+    [Theory]
+    [InlineData("urls", "http://0.0.0.0:8430", false)]
+    [InlineData("Kestrel:Endpoints:Http:Url", "http://0.0.0.0:8430", false)]
+    [InlineData("HTTP_PORTS", "8080", false)]
+    [InlineData("HTTPS_PORTS", "8443", false)]
+    [InlineData("Kestrel:Endpoints:Http:Url", "http://127.0.0.1:8430", true)]
+    [InlineData("urls", "http://127.0.0.1:8430", true)]
+    public void EnsureLoopbackOnly_ChecksEverySetting(string key, string value, bool accepted)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { [key] = value }).Build();
+
+        var exception = Record.Exception(() => ListenAddressPolicy.EnsureLoopbackOnly(configuration));
+
+        Assert.Equal(accepted, exception is null);
+    }
+
+    /// <summary>Kestrel ignores the port settings when urls is set. So a container image that sets HTTP_PORTS still starts on loopback.</summary>
+    [Fact]
+    public void PortSettings_AreAllowed_WhenUrlsIsSet()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["urls"] = "http://127.0.0.1:8430",
+            ["HTTP_PORTS"] = "8080",
+        }).Build();
+
+        Assert.Null(Record.Exception(() => ListenAddressPolicy.EnsureLoopbackOnly(configuration)));
+    }
 }

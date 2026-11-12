@@ -1,8 +1,8 @@
-using System.ComponentModel.DataAnnotations;
 using System.Text;
 using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Application.Engine.Events;
 using Xat.Orchestrator.Application.Engine.Execution;
+using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Application.Engine.State;
 using Xat.Orchestrator.Application.Engine.StepContracts;
 using Xat.Orchestrator.Domain.Errors;
@@ -95,12 +95,13 @@ public sealed class LlmGenerateStep(ILlmClient llm, IModelCatalog models) : IPip
     /// <inheritdoc/>
     public IReadOnlyList<string> Validate(LlmGenerateOptions options, StepValidationContext context)
     {
-        if (options.Model is null || options.Model.Contains("${", StringComparison.Ordinal))
+        if (options.Model is null || ExpressionResolver.IsExpression(options.Model))
         {
             return [];
         }
 
+        // The alias comes from the pipeline file here, not from a caller, so the message can name it.
         var model = context.Models.Resolve(options.Model);
-        return model.IsSuccess ? [] : [model.Error.Message];
+        return model.IsSuccess ? [] : [$"{model.Error.Message} The alias is '{options.Model}'."];
     }
 }

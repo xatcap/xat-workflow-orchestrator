@@ -4,7 +4,6 @@ using Xat.Orchestrator.Application.Abstractions.Runs;
 using Xat.Orchestrator.Application.Jobs;
 using Xat.Orchestrator.Application.Tests.Fakes;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Domain.Retrieval;
 using Xat.Orchestrator.Domain.Runs;
 
@@ -69,6 +68,71 @@ public sealed class AsyncRunServiceTests : IDisposable
 
     private static Task<RunRecord> WaitFinishedAsync(AsyncRunService service, string runId) =>
         WaitForAsync(service, runId, record => record.IsFinished);
+
+    /// <summary>
+    /// A cancelled queued run leaves the queue at once, so it frees its place for a new run. Its webhook goes out once,
+    /// and a worker never executes it.
+    /// </summary>
+    [Fact]
+    public async Task CancelledQueuedRun_FreesItsPlace_AndSendsOneWebhook()
+    {
+        var rag = new FakeRetrievalClient();
+        using var services = Build(rag, queueLimit: 2);
+        var service = services.GetRequiredService<AsyncRunService>();
+        var first = service.Submit(TestData.RagQa(), TestData.Json("""{"prompt":"one"}"""), "https://hooks.example/x", debug: false).Value!;
+        service.Submit(TestData.RagQa(), TestData.Json("""{"prompt":"two"}"""), null, debug: false);
+        Assert.Equal("jobs.queue_full", service.Submit(TestData.RagQa(), TestData.Json("""{"prompt":"three"}"""), null, debug: false).Error!.Code);
+
+        var cancelled = service.Cancel(first.RunId);
+        var accepted = service.Submit(TestData.RagQa(), TestData.Json("""{"prompt":"four"}"""), null, debug: false);
+        StartWorkers(service);
+
+        Assert.Equal(RunState.Cancelled, cancelled.Value!.State);
+        Assert.True(accepted.IsSuccess);
+        await WaitForAsync(service, first.RunId, record => record.Webhook.State == WebhookState.Delivered);
+        await WaitFinishedAsync(service, accepted.Value!.RunId);
+        Assert.Single(_webhooks.Calls, call => call.RunId == first.RunId);
+        Assert.DoesNotContain(rag.Queries, query => query.Question == "one");
+    }
+
+    /// <summary>A run that still executes when the service stops ends as cancelled with the code run.service_stopped.</summary>
+    [Fact]
+    public async Task RunDuringStop_EndsWithServiceStopped()
+    {
+        var started = new TaskCompletionSource();
+        var llm = new FakeLlmClient
+        {
+            OnComplete = async (_, ct) =>
+            {
+                started.TrySetResult();
+                await Task.Delay(Timeout.Infinite, ct);
+                return Result<Completion>.Fail(new PipelineError("never", "Never.", ErrorKind.Internal));
+            },
+        };
+        using var services = Build(llm: llm);
+        var service = services.GetRequiredService<AsyncRunService>();
+        var submitted = service.Submit(TestData.RagQa(), TestData.Json("""{"prompt":"Q"}"""), null, debug: false).Value!;
+        StartWorkers(service);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+
+        await _stop.CancelAsync();
+        var finished = await WaitFinishedAsync(service, submitted.RunId);
+
+        Assert.Equal(RunState.Cancelled, finished.State);
+        Assert.Equal("run.service_stopped", finished.Error!.Code);
+    }
+
+    /// <summary>An asynchronous run never streams, so a request for a stream is refused at submit.</summary>
+    [Fact]
+    public void StreamRequest_IsRefusedAtSubmit()
+    {
+        using var services = Build();
+        var service = services.GetRequiredService<AsyncRunService>();
+
+        var submitted = service.Submit(TestData.RagQa(), TestData.Json("""{"prompt":"Q"}"""), null, debug: false, stream: true);
+
+        Assert.Equal("stream.not_supported_async", submitted.Error!.Code);
+    }
 
     /// <summary>A submitted run is queued at first. A worker runs it, and the record then holds the answer and the times.</summary>
     [Fact]

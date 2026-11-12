@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Application.Abstractions.Retrieval;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Domain.Retrieval;
 using Xat.Orchestrator.Infrastructure.Options.Retrieval;
 
@@ -26,11 +25,12 @@ internal sealed class ConfigRetrievalProfiles : IRetrievalProfiles
     public IReadOnlyCollection<RetrievalProfile> All => _profiles.Values;
 
     /// <inheritdoc/>
+    /// <remarks>The alias can come from the input of the caller, so the error does not repeat it.</remarks>
     public Result<RetrievalProfile> Resolve(string profileAlias) =>
         _profiles.TryGetValue(profileAlias, out var profile)
             ? Result<RetrievalProfile>.Ok(profile)
             : Result<RetrievalProfile>.Fail(new PipelineError(
-                "retrieval.profile_unknown",
-                $"The retrieval profile '{profileAlias}' is not configured. Add it to {RetrievalOptions.SectionName}:Profiles.",
-                ErrorKind.NotFound));
+                "retrieve.profile_unknown",
+                $"The retrieval profile is not configured. Add it to {RetrievalOptions.SectionName}:Profiles.",
+                ErrorKind.Validation));
 }

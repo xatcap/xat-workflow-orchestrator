@@ -9,7 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- The pipeline files and the prompt templates sit at the root of the repository. They go to the output folder. -->
-    <Content Include="..\..\pipelines\**\*.yaml" Link="pipelines\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\pipelines\**\*.yaml;..\..\pipelines\**\*.yml" Link="pipelines\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\prompts\**\*.liquid" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

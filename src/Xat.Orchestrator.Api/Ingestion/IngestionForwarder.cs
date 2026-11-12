@@ -2,7 +2,6 @@ using System.Net;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Options;
 using Xat.Orchestrator.Api.Errors;
-using Xat.Orchestrator.Application.Abstractions.Retrieval;
 using Xat.Orchestrator.Domain.Errors;
 using Yarp.ReverseProxy.Forwarder;
 
@@ -12,7 +11,7 @@ namespace Xat.Orchestrator.Api.Ingestion;
 /// Sends a request of the caller on to xat-rag and streams the answer back. The forwarder does not buffer the body,
 /// so a large upload does not fill the memory of the orchestrator. The forwarder never follows a redirect.
 /// </summary>
-internal sealed class IngestionForwarder(IHttpForwarder forwarder, IXatRagEndpoint endpoint, IOptions<IngestionOptions> options)
+internal sealed class IngestionForwarder(IHttpForwarder forwarder, IIngestionTarget endpoint, IOptions<IngestionOptions> options)
 {
     private static readonly HttpMessageInvoker _client = new(new SocketsHttpHandler
     {
@@ -75,19 +74,14 @@ internal sealed class IngestionForwarder(IHttpForwarder forwarder, IXatRagEndpoi
         }
 
         string? pathOverride = null;
-        if (keepRawPath)
+        if (keepRawPath && !IngestionRawPath.TryBuildDeletePath(http, (string)http.Request.RouteValues["rag"]!, out pathOverride))
         {
-            if (!IngestionRawPath.TryBuildDeletePath(http, (string)http.Request.RouteValues["rag"]!, out var rawPath))
-            {
-                await ApiErrors.WriteAsync(
-                    http,
-                    new PipelineError("ingestion.route_not_found", "The document ID is not valid.", ErrorKind.NotFound),
-                    null,
-                    http.RequestAborted);
-                return;
-            }
-
-            pathOverride = rawPath;
+            await ApiErrors.WriteAsync(
+                http,
+                new PipelineError("ingestion.route_not_found", "The document ID is not valid.", ErrorKind.NotFound),
+                null,
+                http.RequestAborted);
+            return;
         }
 
         var located = await endpoint.LocateAsync(http.RequestAborted);

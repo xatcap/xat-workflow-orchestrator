@@ -1,6 +1,3 @@
-using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Retrieval;
-
 namespace Xat.Orchestrator.Application.Abstractions.Retrieval;
 
 /// <summary>A question for one xat-rag context.</summary>

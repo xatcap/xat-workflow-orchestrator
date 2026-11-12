@@ -3,7 +3,6 @@ using System.Text.Json;
 using Xat.Orchestrator.Api.Tests.Support;
 using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Domain.Retrieval;
 
 namespace Xat.Orchestrator.Api.Tests.Endpoints;

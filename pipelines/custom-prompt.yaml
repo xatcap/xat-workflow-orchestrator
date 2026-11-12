@@ -1,4 +1,4 @@
-# The seven-step flow, plus a citation check at the end:
+# The steps of the flow:
 #   1. Set the system prompt (from the API call).
 #   2. Set the prompt of the caller.
 #   3. Set the context of the caller.

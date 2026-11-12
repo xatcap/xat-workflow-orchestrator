@@ -1,8 +1,5 @@
 using Xat.Orchestrator.Application.Engine.Events;
-using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
 using Xat.Orchestrator.Domain.Pipelines;
-using Xat.Orchestrator.Domain.Runs;
 
 namespace Xat.Orchestrator.Application.Engine.State;
 
@@ -23,4 +20,22 @@ public sealed class PipelineContext
 
     /// <summary>Gets the clock. Use it in place of the system time.</summary>
     public required TimeProvider Clock { get; init; }
+
+    /// <summary>Gets the time limit of the run.</summary>
+    public required TimeSpan RunTimeout { get; init; }
+
+    /// <summary>Gets the time stamp of the clock when the run started.</summary>
+    public required long StartTimestamp { get; init; }
+
+    /// <summary>Gets the time that the run has used.</summary>
+    /// <returns>The elapsed time.</returns>
+    public TimeSpan Elapsed() => Clock.GetElapsedTime(StartTimestamp);
+
+    /// <summary>Gets the time that is left before the run passes its time limit.</summary>
+    /// <returns>The time that is left, or zero.</returns>
+    public TimeSpan Remaining()
+    {
+        var left = RunTimeout - Elapsed();
+        return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+    }
 }

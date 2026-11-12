@@ -37,4 +37,41 @@ public static class JsonValues
                 return null;
         }
     }
+
+    /// <summary>
+    /// Compares two JSON values by their meaning, not by their text. Text is compared after the escapes are decoded,
+    /// numbers by value (so <c>1</c> and <c>1.0</c> are equal), arrays in order and objects in any property order.
+    /// </summary>
+    /// <param name="left">The first value.</param>
+    /// <param name="right">The second value.</param>
+    /// <returns><see langword="true"/> when the values are equal.</returns>
+    public static bool AreEqual(JsonElement left, JsonElement right)
+    {
+        if (left.ValueKind != right.ValueKind)
+        {
+            return false;
+        }
+
+        return left.ValueKind switch
+        {
+            JsonValueKind.String => string.Equals(left.GetString(), right.GetString(), StringComparison.Ordinal),
+            JsonValueKind.Number => NumbersAreEqual(left, right),
+            JsonValueKind.Array => left.GetArrayLength() == right.GetArrayLength()
+                && left.EnumerateArray().Zip(right.EnumerateArray()).All(pair => AreEqual(pair.First, pair.Second)),
+            JsonValueKind.Object => ObjectsAreEqual(left, right),
+            _ => true,
+        };
+    }
+
+    private static bool NumbersAreEqual(JsonElement left, JsonElement right) =>
+        left.TryGetDecimal(out var a) && right.TryGetDecimal(out var b)
+            ? a == b
+            : left.GetDouble().Equals(right.GetDouble());
+
+    private static bool ObjectsAreEqual(JsonElement left, JsonElement right)
+    {
+        var leftProperties = left.EnumerateObject().ToList();
+        return leftProperties.Count == right.EnumerateObject().Count()
+            && leftProperties.All(property => right.TryGetProperty(property.Name, out var other) && AreEqual(property.Value, other));
+    }
 }

@@ -1,13 +1,7 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Retrieval;
 
 namespace Xat.Orchestrator.Api.Tests.Support;
 

@@ -64,22 +64,14 @@ internal static class YamlPipelineReader
             problems.Add($"{source}: the key 'name' is required.");
         }
 
-        var version = 1;
-        if (top["version"] is { } versionNode)
+        var version = ReadVersion(top["version"]);
+        if (version is null)
         {
-            // The reader stores a whole number as a long, so read a long and check the range.
-            if (versionNode is JsonValue number && number.TryGetValue<long>(out var parsed) && parsed is >= 1 and <= int.MaxValue)
-            {
-                version = (int)parsed;
-            }
-            else
-            {
-                problems.Add($"{source}: the key 'version' must be an integer of 1 or higher.");
-            }
+            problems.Add($"{source}: the key 'version' must be an integer of 1 or higher.");
         }
 
-        var stream2 = StreamMode.Allowed;
-        if (Text(top, "stream") is { } streamText && !Enum.TryParse(streamText, ignoreCase: true, out stream2))
+        var streamMode = ReadStreamMode(Text(top, "stream"));
+        if (streamMode is null)
         {
             problems.Add($"{source}: the key 'stream' must be allowed, never or required.");
         }
@@ -98,8 +90,34 @@ internal static class YamlPipelineReader
             return Fail(string.Join(" ", problems));
         }
 
-        return Result<PipelineDefinition>.Ok(new PipelineDefinition(name!, version, Text(top, "summary") ?? string.Empty, stream2, schema, steps));
+        return Result<PipelineDefinition>.Ok(
+            new PipelineDefinition(name!, version!.Value, Text(top, "summary") ?? string.Empty, streamMode!.Value, schema, steps));
     }
+
+    /// <summary>Reads the version. The reader stores a whole number as a long, so it reads a long and checks the range.</summary>
+    /// <returns>The version, 1 when the key is not set, or <see langword="null"/> when the value is not valid.</returns>
+    private static int? ReadVersion(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return 1;
+        }
+
+        return node is JsonValue number && number.TryGetValue<long>(out var parsed) && parsed is >= 1 and <= int.MaxValue
+            ? (int)parsed
+            : null;
+    }
+
+    /// <summary>Reads the stream mode by name only. A number or a list of flags, such as <c>7</c> or <c>1,2</c>, is not valid.</summary>
+    /// <returns>The mode, <see cref="StreamMode.Allowed"/> when the key is not set, or <see langword="null"/> when the value is not valid.</returns>
+    private static StreamMode? ReadStreamMode(string? text) =>
+        text?.ToLowerInvariant() switch
+        {
+            null or "allowed" => StreamMode.Allowed,
+            "never" => StreamMode.Never,
+            "required" => StreamMode.Required,
+            _ => null,
+        };
 
     private static List<StepDefinition> ReadSteps(JsonObject top, string source, List<string> problems)
     {
@@ -184,7 +202,10 @@ internal static class YamlPipelineReader
                 var obj = new JsonObject();
                 foreach (var (key, value) in mapping.Children)
                 {
-                    obj[((YamlScalarNode)key).Value ?? string.Empty] = ToJson(value);
+                    var name = key is YamlScalarNode scalarKey
+                        ? scalarKey.Value ?? string.Empty
+                        : throw new YamlException(key.Start, key.End, "A key must be text, not a list or a mapping.");
+                    obj[name] = ToJson(value);
                 }
 
                 return obj;

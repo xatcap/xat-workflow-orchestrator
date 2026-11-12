@@ -10,7 +10,7 @@ namespace Xat.Orchestrator.Api.Ingestion;
 /// </summary>
 internal static class IngestionRawPath
 {
-    /// <summary>Builds the path for xat-rag.</summary>
+    /// <summary>Builds the path and the query for xat-rag.</summary>
     /// <param name="http">The HTTP context of the request.</param>
     /// <param name="rag">The name of the RAG, from the route.</param>
     /// <param name="path">The path for xat-rag, when the method returns <see langword="true"/>.</param>
@@ -40,7 +40,9 @@ internal static class IngestionRawPath
             return false;
         }
 
-        path = prefix + rawId;
+        // The query goes to xat-rag unchanged. The decoded path of the fallback has no query, so the query then comes from the request.
+        var queryText = query < 0 ? http.Request.QueryString.Value ?? string.Empty : raw[query..];
+        path = prefix + rawId + queryText;
         return true;
     }
 

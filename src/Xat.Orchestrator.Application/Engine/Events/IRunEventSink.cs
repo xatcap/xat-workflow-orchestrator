@@ -1,8 +1,3 @@
-using System.Threading.Channels;
-using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Runs;
-
 namespace Xat.Orchestrator.Application.Engine.Events;
 
 /// <summary>Receives the events of a run.</summary>
@@ -10,6 +5,12 @@ public interface IRunEventSink
 {
     /// <summary>Gets a value that shows whether the caller reads a stream. Steps that can stream must then send deltas.</summary>
     bool Streaming { get; }
+
+    /// <summary>
+    /// Gets the number of events that the sink took. The engine uses it to see whether a step already sent a part of its result
+    /// to the caller. Such a step must not run again.
+    /// </summary>
+    long EmittedCount { get; }
 
     /// <summary>Sends an event.</summary>
     /// <param name="runEvent">The event.</param>

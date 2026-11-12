@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Xat.Orchestrator.Domain.Errors;
 
 namespace Xat.Orchestrator.Application.Steps.Retrieval;
 

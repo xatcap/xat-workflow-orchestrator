@@ -1,4 +1,3 @@
-using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Generation;
 
 namespace Xat.Orchestrator.Application.Abstractions.Llm;

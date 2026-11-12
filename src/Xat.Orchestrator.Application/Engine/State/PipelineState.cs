@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
+using Xat.Orchestrator.Application.Engine.Inputs;
 using Xat.Orchestrator.Domain.Generation;
 
 namespace Xat.Orchestrator.Application.Engine.State;
@@ -9,7 +10,7 @@ namespace Xat.Orchestrator.Application.Engine.State;
 public sealed class PipelineState
 {
     private readonly Dictionary<string, object?> _values = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IReadOnlyDictionary<string, object?>> _outputs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, object?>> _outputs = new(StringComparer.Ordinal);
     private readonly List<string> _warnings = [];
 
     /// <summary>Initializes a new instance of the <see cref="PipelineState"/> class.</summary>
@@ -75,22 +76,42 @@ public sealed class PipelineState
         return false;
     }
 
-    /// <summary>Stores the named results of a step. Later steps and expressions read them as <c>steps.&lt;id&gt;.&lt;name&gt;</c>.</summary>
+    /// <summary>Stores one named result of a step. Later steps and expressions read it as <c>steps.&lt;id&gt;.&lt;name&gt;</c>.</summary>
+    /// <typeparam name="T">The type of the result.</typeparam>
     /// <param name="stepId">The ID of the step.</param>
-    /// <param name="output">The results of the step.</param>
-    public void SetOutput(string stepId, IReadOnlyDictionary<string, object?> output)
+    /// <param name="key">The key of the result, for example <see cref="StepOutputs.Chunks"/>.</param>
+    /// <param name="value">The result.</param>
+    public void SetOutput<T>(string stepId, StateKey<T> key, T value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stepId);
-        ArgumentNullException.ThrowIfNull(output);
-        _outputs[stepId] = output;
+        ArgumentNullException.ThrowIfNull(key);
+        if (!_outputs.TryGetValue(stepId, out var output))
+        {
+            output = new Dictionary<string, object?>(StringComparer.Ordinal);
+            _outputs[stepId] = output;
+        }
+
+        output[key.Name] = value;
     }
 
-    /// <summary>Reads the named results of a step.</summary>
+    /// <summary>Reads one named result of a step.</summary>
+    /// <typeparam name="T">The type of the result.</typeparam>
     /// <param name="stepId">The ID of the step.</param>
-    /// <param name="output">The results, when the step stored them.</param>
-    /// <returns><see langword="true"/> when the step stored results.</returns>
-    public bool TryGetOutput(string stepId, [MaybeNullWhen(false)] out IReadOnlyDictionary<string, object?> output) =>
-        _outputs.TryGetValue(stepId, out output);
+    /// <param name="key">The key of the result.</param>
+    /// <param name="value">The result, when the step stored a result of this type.</param>
+    /// <returns><see langword="true"/> when the step stored the result.</returns>
+    public bool TryGetOutput<T>(string stepId, StateKey<T> key, [MaybeNullWhen(false)] out T value)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        if (_outputs.TryGetValue(stepId, out var output) && output.TryGetValue(key.Name, out var raw) && raw is T typed)
+        {
+            value = typed;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
 
     /// <summary>
     /// Reads a value by its path. A path starts with <c>input.</c> and then names JSON properties or array positions,
@@ -107,7 +128,7 @@ public sealed class PipelineState
             return false;
         }
 
-        var parts = path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = ExpressionPath.Split(path);
         if (parts.Length == 0)
         {
             return false;

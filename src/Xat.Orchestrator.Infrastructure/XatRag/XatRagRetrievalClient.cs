@@ -10,8 +10,9 @@ namespace Xat.Orchestrator.Infrastructure.XatRag;
 /// <summary>
 /// The adapter to xat-rag. It calls <c>POST /v1/context</c>, and it turns the answers into domain types.
 /// The chunk text goes into <see cref="UntrustedText"/>, because the text of a document can hold instructions that an attacker wrote.
+/// The adapter is a singleton. It gets a client from the factory for each call, so the factory can renew the handlers.
 /// </summary>
-internal sealed class XatRagRetrievalClient(HttpClient http) : IRetrievalClient
+internal sealed class XatRagRetrievalClient(IHttpClientFactory factory) : IRetrievalClient
 {
     private const string Name = "xat-rag";
 
@@ -24,6 +25,7 @@ internal sealed class XatRagRetrievalClient(HttpClient http) : IRetrievalClient
     public async Task<Result<RetrievedSet>> RetrieveAsync(RetrievalQuery query, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
+        using var http = factory.CreateClient(DependencyInjection.XatRagClient);
         try
         {
             using var response = await http.PostAsJsonAsync(

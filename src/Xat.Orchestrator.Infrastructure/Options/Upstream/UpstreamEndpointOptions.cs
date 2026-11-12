@@ -12,10 +12,10 @@ internal sealed class UpstreamEndpointOptions
     public string? ReadyFile { get; init; }
 
     /// <summary>Gets the highest time of one request, with all retries, in seconds.</summary>
-    [Range(1, 3600)]
+    [Range(1, 3600, ErrorMessage = "must be from 1 to 3600.")]
     public int RequestTimeoutSeconds { get; init; } = 120;
 
     /// <summary>Gets the number of retries after a 429, 503 or 504 answer or a failed connection.</summary>
-    [Range(0, 5)]
+    [Range(0, 5, ErrorMessage = "must be from 0 to 5.")]
     public int RetryCount { get; init; } = 2;
 }

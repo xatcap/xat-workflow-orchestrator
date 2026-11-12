@@ -1,10 +1,6 @@
 using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Application.Abstractions.Pipelines;
 using Xat.Orchestrator.Application.Abstractions.Retrieval;
-using Xat.Orchestrator.Domain.Errors;
-using Xat.Orchestrator.Domain.Generation;
-using Xat.Orchestrator.Domain.Pipelines;
-using Xat.Orchestrator.Domain.Runs;
 
 namespace Xat.Orchestrator.Application.Engine.StepContracts;
 
@@ -17,4 +13,11 @@ public sealed record StepValidationContext(
     IRetrievalProfiles Profiles,
     IModelCatalog Models,
     IPromptTemplateStore Templates,
-    IReadOnlySet<string> EarlierStepIds);
+    IReadOnlySet<string> EarlierStepIds)
+{
+    /// <summary>
+    /// Gets the JSON names of the options that hold one expression and that are not text, for example <c>isEmpty: "${input.flag}"</c>.
+    /// Their value is known only when the run starts, so they are not set in the options that the check gets.
+    /// </summary>
+    public IReadOnlySet<string> DeferredOptions { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+}

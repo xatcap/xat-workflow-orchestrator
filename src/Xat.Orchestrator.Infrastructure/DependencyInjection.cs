@@ -4,13 +4,10 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Polly;
-using Polly.Retry;
 using Xat.Orchestrator.Application.Abstractions.Llm;
 using Xat.Orchestrator.Application.Abstractions.Pipelines;
 using Xat.Orchestrator.Application.Abstractions.Retrieval;
 using Xat.Orchestrator.Application.Abstractions.Runs;
-using Xat.Orchestrator.Application.Engine.Execution;
-using Xat.Orchestrator.Application.Jobs;
 using Xat.Orchestrator.Infrastructure.Catalogs;
 using Xat.Orchestrator.Infrastructure.Definitions;
 using Xat.Orchestrator.Infrastructure.Discovery;
@@ -49,7 +46,7 @@ public static class DependencyInjection
         AddOptions(services, configuration);
 
         services.AddSingleton<IUpstreamLocator, ReadyFileLocator>();
-        services.AddSingleton<IXatRagEndpoint, XatRagEndpoint>();
+        services.AddSingleton(provider => new XatRagEndpoint(provider.GetRequiredService<IUpstreamLocator>()));
         services.AddSingleton<IRetrievalProfiles, ConfigRetrievalProfiles>();
         services.AddSingleton<IModelCatalog, ConfigModelCatalog>();
         services.AddSingleton<IPromptTemplateStore, FluidPromptTemplateStore>();
@@ -87,15 +84,11 @@ public static class DependencyInjection
 
         services.AddOptions<PipelinesOptions>().Bind(configuration.GetSection(PipelinesOptions.SectionName));
         services.AddOptions<PromptsOptions>().Bind(configuration.GetSection(PromptsOptions.SectionName));
-        services.AddOptions<RunnerOptions>().Bind(configuration.GetSection(RunnerOptions.SectionName)).ValidateOnStart();
-        services.AddOptions<JobsOptions>().Bind(configuration.GetSection(JobsOptions.SectionName)).ValidateOnStart();
         services.AddOptions<WebhookOptions>().Bind(configuration.GetSection(WebhookOptions.SectionName)).ValidateOnStart();
 
         services.AddSingleton<IValidateOptions<UpstreamOptions>, UpstreamOptionsValidator>();
         services.AddSingleton<IValidateOptions<RetrievalOptions>, RetrievalOptionsValidator>();
         services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
-        services.AddSingleton<IValidateOptions<RunnerOptions>, RunnerOptionsValidator>();
-        services.AddSingleton<IValidateOptions<JobsOptions>, JobsOptionsValidator>();
         services.AddSingleton<IValidateOptions<WebhookOptions>, WebhookOptionsValidator>();
     }
 
@@ -111,7 +104,6 @@ public static class DependencyInjection
         // The address handler is inside it, so each retry finds the current address again.
         rag.AddResilienceHandler("xat-rag", builder => ConfigureResilience(builder, upstreams.XatRag));
         rag.AddHttpMessageHandler(provider => new UpstreamAddressHandler(provider.GetRequiredService<IUpstreamLocator>(), Upstream.XatRag));
-        rag.AddTypedClient<IRetrievalClient, XatRagRetrievalClient>();
 
         var llm = services.AddHttpClient(XatLlmEngineClient, client =>
         {
@@ -120,7 +112,14 @@ public static class DependencyInjection
         });
         llm.AddResilienceHandler("xat-llm-engine", builder => ConfigureResilience(builder, upstreams.XatLlmEngine));
         llm.AddHttpMessageHandler(provider => new UpstreamAddressHandler(provider.GetRequiredService<IUpstreamLocator>(), Upstream.XatLlmEngine));
-        llm.AddTypedClient<ILlmClient, XatEngineLlmClient>();
+
+        // The adapters are singletons that get a client from the factory for each call. The steps that use them are singletons too.
+        // The LLM adapter sits behind the limit for each model.
+        services.AddSingleton<IRetrievalClient, XatRagRetrievalClient>();
+        services.AddSingleton<XatEngineLlmClient>();
+        services.AddSingleton<ILlmClient>(provider => new ParallelLimitedLlmClient(
+            provider.GetRequiredService<XatEngineLlmClient>(),
+            provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ParallelLimitedLlmClient>>()));
 
         // The health clients have no retry. A health check must answer fast, also when the service is down.
         services.AddHttpClient(XatRagHealthClient, client => client.BaseAddress = new Uri("http://xat-rag.invalid/"))

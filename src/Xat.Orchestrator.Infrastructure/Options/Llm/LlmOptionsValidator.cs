@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
-using Xat.Orchestrator.Infrastructure.Discovery;
+using Xat.Orchestrator.Application.Configuration;
 
 namespace Xat.Orchestrator.Infrastructure.Options.Llm;
 
@@ -36,11 +36,15 @@ internal sealed partial class LlmOptionsValidator : IValidateOptions<LlmOptions>
                 failures.Add($"{prefix}:Model must have the form provider/model.");
             }
 
-            if (model.Parallel < 1)
-            {
-                failures.Add($"{prefix}:Parallel must be at least 1.");
-            }
+            OptionRules.Check(model, prefix, failures);
         }
+
+        // The limit belongs to the model, so all aliases of one model must use the same limit.
+        failures.AddRange(options.Models
+            .GroupBy(pair => pair.Value.Model, StringComparer.Ordinal)
+            .Where(group => group.Select(pair => pair.Value.Parallel).Distinct().Count() > 1)
+            .Select(group => $"{LlmOptions.SectionName}:Models: the aliases {string.Join(", ", group.Select(pair => pair.Key))} use the model "
+                + $"'{group.Key}' with different Parallel values. The limit is for the model, so use the same value."));
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }

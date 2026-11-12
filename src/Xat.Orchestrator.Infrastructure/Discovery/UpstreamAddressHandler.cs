@@ -1,9 +1,3 @@
-using System.Collections.Concurrent;
-using System.Net;
-using System.Text.Json;
-using Microsoft.Extensions.Options;
-using Xat.Orchestrator.Domain.Errors;
-
 namespace Xat.Orchestrator.Infrastructure.Discovery;
 
 /// <summary>
@@ -18,7 +12,7 @@ internal sealed class UpstreamAddressHandler(IUpstreamLocator locator, Upstream 
         var located = await locator.LocateAsync(upstream, cancellationToken);
         if (!located.IsSuccess)
         {
-            throw new HttpRequestException(HttpRequestError.ConnectionError, located.Error.Message);
+            throw new UpstreamNotLocatedException(located.Error);
         }
 
         var path = request.RequestUri?.PathAndQuery ?? "/";

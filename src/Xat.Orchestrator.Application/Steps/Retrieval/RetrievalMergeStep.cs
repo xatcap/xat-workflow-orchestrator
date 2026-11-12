@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Xat.Orchestrator.Application.Engine.Execution;
 using Xat.Orchestrator.Application.Engine.State;
 using Xat.Orchestrator.Application.Engine.StepContracts;
@@ -22,9 +21,7 @@ public sealed class RetrievalMergeStep : IPipelineStep<RetrievalMergeOptions>, I
         var lists = new List<IReadOnlyList<Chunk>>();
         foreach (var source in options.From!)
         {
-            if (!state.TryGetOutput(source, out var output)
-                || !output.TryGetValue("chunks", out var chunks)
-                || chunks is not IReadOnlyList<Chunk> list)
+            if (!state.TryGetOutput(source, StepOutputs.Chunks, out var list))
             {
                 return ValueTask.FromResult(StepOutcome.Fail(new PipelineError(
                     "merge.source_missing", $"The step '{source}' has no chunks to merge.", ErrorKind.Validation, Source: stepId)));
@@ -33,34 +30,24 @@ public sealed class RetrievalMergeStep : IPipelineStep<RetrievalMergeOptions>, I
             lists.Add(list);
         }
 
-        var merged = new List<Chunk>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var longest = lists.Count == 0 ? 0 : lists.Max(list => list.Count);
-        for (var rank = 0; rank < longest; rank++)
-        {
-            foreach (var list in lists)
-            {
-                if (rank < list.Count && (!options.Dedupe || seen.Add(list[rank].ChunkId)))
-                {
-                    merged.Add(list[rank]);
-                }
-            }
-        }
+        var merged = InRankOrder(lists)
+            .Where(chunk => !options.Dedupe || seen.Add(chunk.ChunkId))
+            .Take(options.MaxChunks ?? int.MaxValue)
+            .ToList();
 
-        if (options.MaxChunks is { } max && merged.Count > max)
-        {
-            merged.RemoveRange(max, merged.Count - max);
-        }
-
-        state.SetOutput(stepId, new Dictionary<string, object?>
-        {
-            ["chunks"] = (IReadOnlyList<Chunk>)merged,
-            ["count"] = merged.Count,
-        });
-        state.Prompt.ReplaceChunkSections(
-            options.From!.ToList(),
-            new PromptSection(stepId, PromptSectionKind.Chunks, null, stepId, Trusted: false));
+        state.SetOutput<IReadOnlyList<Chunk>>(stepId, StepOutputs.Chunks, merged);
+        state.SetOutput(stepId, StepOutputs.Count, merged.Count);
+        state.Prompt.ReplaceChunkSections(options.From!.ToList(), PromptSection.ForChunks(stepId));
         return ValueTask.FromResult(StepOutcome.Continue);
+    }
+
+    /// <summary>Gives the first chunk of each list, then the second chunk of each list, and so on.</summary>
+    private static IEnumerable<Chunk> InRankOrder(List<IReadOnlyList<Chunk>> lists)
+    {
+        var longest = lists.Count == 0 ? 0 : lists.Max(list => list.Count);
+        return Enumerable.Range(0, longest)
+            .SelectMany(rank => lists.Where(list => rank < list.Count).Select(list => list[rank]));
     }
 
     /// <inheritdoc/>

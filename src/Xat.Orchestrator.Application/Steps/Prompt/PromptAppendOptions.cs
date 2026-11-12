@@ -1,6 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text.RegularExpressions;
-using Xat.Orchestrator.Domain.Errors;
 
 namespace Xat.Orchestrator.Application.Steps.Prompt;
 

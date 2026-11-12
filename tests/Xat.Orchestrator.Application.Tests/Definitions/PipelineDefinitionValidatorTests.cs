@@ -47,6 +47,31 @@ public class PipelineDefinitionValidatorTests
         Assert.Contains(problems, problem => problem.Contains(expectedPart, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// An option that is a number or a flag can hold one expression. Its value is known only when the run starts, so the start accepts it.
+    /// </summary>
+    [Theory]
+    [InlineData("""[{"id":"r","uses":"rag.retrieve","with":"{\"profile\":\"default\",\"chunks\":\"${input.n}\"}"},{"id":"g","uses":"llm.generate","with":"{\"temperature\":\"${input.t ?? '0.2'}\"}"}]""")]
+    [InlineData("""[{"id":"r","uses":"rag.retrieve","with":"{\"profile\":\"default\"}"},{"id":"c","uses":"flow.complete-if","with":"{\"key\":\"steps.r.chunks\",\"isEmpty\":\"${input.flag}\",\"text\":\"t\"}"},{"id":"g","uses":"llm.generate"}]""")]
+    public void TypedOptionWithOneExpression_IsAccepted(string stepsJson)
+    {
+        Assert.Empty(Validate(TestData.Pipeline("t", Steps(stepsJson))));
+    }
+
+    /// <summary>A number option that mixes an expression with other text can never be a number, so the start refuses it.</summary>
+    [Fact]
+    public void TypedOptionWithMixedText_IsRefused()
+    {
+        var steps = Steps("""[{"id":"r","uses":"rag.retrieve","with":"{\"profile\":\"default\",\"chunks\":\"n${input.n}\"}"},{"id":"g","uses":"llm.generate"}]""");
+
+        Assert.NotEmpty(Validate(TestData.Pipeline("t", steps)));
+    }
+
+    private static List<Domain.Pipelines.StepDefinition> Steps(string stepsJson) =>
+        System.Text.Json.JsonSerializer.Deserialize<List<Spec>>(stepsJson, TestData.WebOptions)!
+            .Select(spec => TestData.Step(spec.Id, spec.Uses, spec.With ?? "{}"))
+            .ToList();
+
     /// <summary>A pipeline with no steps, a bad name or a bad version is not valid.</summary>
     [Fact]
     public void BadNameVersionAndNoSteps_AreFound()

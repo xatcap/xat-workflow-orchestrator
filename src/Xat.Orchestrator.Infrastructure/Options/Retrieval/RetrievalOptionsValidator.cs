@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
-using Xat.Orchestrator.Infrastructure.Discovery;
+using Xat.Orchestrator.Application.Configuration;
 
 namespace Xat.Orchestrator.Infrastructure.Options.Retrieval;
 
@@ -26,10 +26,7 @@ internal sealed partial class RetrievalOptionsValidator : IValidateOptions<Retri
                 failures.Add($"{RetrievalOptions.SectionName}:Profiles:{alias}:Context must be a xat-rag context name.");
             }
 
-            if (profile.Chunks is < 1 or > 100)
-            {
-                failures.Add($"{RetrievalOptions.SectionName}:Profiles:{alias}:Chunks must be from 1 to 100.");
-            }
+            OptionRules.Check(profile, $"{RetrievalOptions.SectionName}:Profiles:{alias}", failures);
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);

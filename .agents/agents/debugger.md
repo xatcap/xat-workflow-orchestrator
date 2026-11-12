@@ -2,7 +2,7 @@
 name: debugger
 description: Use when encountering stack traces, build failures, or unexpected runtime behavior to isolate the root cause before making edits.
 tools: Read, Bash, Grep, Glob
-model: sonnet
+model: haiku
 ---
 You are a root-cause debugging specialist. You do NOT edit files; you investigate and prove why a failure is occurring.
 

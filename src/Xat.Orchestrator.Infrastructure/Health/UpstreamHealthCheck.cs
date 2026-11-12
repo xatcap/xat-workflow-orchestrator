@@ -25,7 +25,7 @@ internal abstract class UpstreamHealthCheck(IHttpClientFactory factory, string c
                 ? HealthCheckResult.Healthy($"{upstreamName} is ready.")
                 : new HealthCheckResult(context.Registration.FailureStatus, $"{upstreamName} is not ready. It answered with status {(int)response.StatusCode}.");
         }
-        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException)
+        catch (Exception exception) when (exception is HttpRequestException or IOException or OperationCanceledException)
         {
             return new HealthCheckResult(context.Registration.FailureStatus, $"{upstreamName} is not reachable.");
         }

@@ -1,4 +1,5 @@
 using Xat.Orchestrator.Domain.Errors;
+using Xat.Orchestrator.Infrastructure.Options.Upstream;
 using Xat.Orchestrator.Infrastructure.Options.Webhooks;
 using Xat.Orchestrator.Infrastructure.Webhooks;
 
@@ -70,5 +71,48 @@ public class WebhookPolicyTests
 
         Assert.Equal("webhook.invalid_url", result.Error!.Code);
         Assert.DoesNotContain("user:pass", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A loopback address on a port of the orchestrator or of an upstream service is refused, also when <c>*</c> allows every host.
+    /// The other loopback forms, such as IPv6 and a decimal address, are checked the same way.
+    /// </summary>
+    [Theory]
+    [InlineData("http://127.0.0.1:8430/hook")]
+    [InlineData("http://localhost:8421/v1/rags/docs/rebuild")]
+    [InlineData("http://[::1]:8420/hook")]
+    [InlineData("http://2130706433:8421/hook")]
+    [InlineData("http://0x7f000001:8430/hook")]
+    [InlineData("http://0.0.0.0:8421/v1/rags/docs/rebuild")]
+    [InlineData("http://[::]:8421/hook")]
+    [InlineData("http://localhost.:8421/hook")]
+    public void PortOfTheOrchestratorOrAnUpstream_IsRefused(string url)
+    {
+        var options = new WebhookOptions();
+        options.AllowedHosts.Add("*");
+        var upstreams = Microsoft.Extensions.Options.Options.Create(new UpstreamOptions
+        {
+            XatRag = new UpstreamEndpointOptions { BaseUrl = "http://127.0.0.1:8421" },
+            XatLlmEngine = new UpstreamEndpointOptions { BaseUrl = "http://127.0.0.1:8420" },
+        });
+        var policy = new WebhookPolicy(Microsoft.Extensions.Options.Options.Create(options), upstreams, new FixedAddresses("http://127.0.0.1:8430"));
+
+        var result = policy.Check(url);
+
+        Assert.Equal("webhook.host_not_allowed", result.Error!.Code);
+    }
+
+    /// <summary>A loopback address on another port is still allowed.</summary>
+    [Fact]
+    public void OtherLoopbackPort_IsAllowed()
+    {
+        var policy = new WebhookPolicy(Microsoft.Extensions.Options.Options.Create(new WebhookOptions()), null, new FixedAddresses("http://127.0.0.1:8430"));
+
+        Assert.True(policy.Check("http://127.0.0.1:9000/hook").IsSuccess);
+    }
+
+    private sealed class FixedAddresses(params string[] urls) : Application.Abstractions.Runs.IListenAddresses
+    {
+        public IReadOnlyCollection<Uri> Current { get; } = urls.Select(url => new Uri(url)).ToList();
     }
 }

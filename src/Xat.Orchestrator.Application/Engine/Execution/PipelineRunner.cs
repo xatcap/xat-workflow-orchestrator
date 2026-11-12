@@ -62,6 +62,8 @@ public sealed class PipelineRunner(
                 input.ValueKind == JsonValueKind.Undefined ? JsonSerializer.SerializeToElement(new Dictionary<string, object?>()) : input),
             Events = sink,
             Clock = clock,
+            RunTimeout = options.Value.RunTimeout,
+            StartTimestamp = clock.GetTimestamp(),
         };
         var completion = RunAsync(context, channel?.Writer, ct);
         return new RunHandle(runId, channel?.Reader, completion);
@@ -112,7 +114,7 @@ public sealed class PipelineRunner(
     {
         var definition = context.Pipeline;
         var state = context.State;
-        var timeout = options.Value.RunTimeout;
+        var timeout = context.RunTimeout;
         using var deadline = new CancellationTokenSource(timeout, clock);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
         var token = linked.Token;
@@ -123,10 +125,9 @@ public sealed class PipelineRunner(
             await context.Events.EmitAsync(new RunEvent.Started(context.RunId, definition.Name, definition.Version), token);
             await NotifyAsync((observer, hookToken) => observer.OnRunStartedAsync(context, hookToken), token);
 
-            var schemaProblems = InputSchemaValidator.Validate(definition.InputSchema, state.Input);
-            if (schemaProblems.Count > 0)
+            if (InputSchemaValidator.Check(definition.InputSchema, state.Input) is { } inputError)
             {
-                return Result<RunResult>.Fail(new PipelineError("input.invalid", string.Join(" ", schemaProblems), ErrorKind.Validation));
+                return Result<RunResult>.Fail(inputError);
             }
 
             foreach (var step in definition.Steps)

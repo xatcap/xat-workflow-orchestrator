@@ -1,12 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Xat.Orchestrator.Application;
-using Xat.Orchestrator.Domain.Errors;
 using Xat.Orchestrator.Domain.Pipelines;
 using Xat.Orchestrator.Infrastructure.Definitions;
-using Xat.Orchestrator.Infrastructure.Discovery;
 
 namespace Xat.Orchestrator.Infrastructure.Tests.Definitions;
 
@@ -87,6 +83,9 @@ public class YamlPipelineReaderTests
     [InlineData("name: 5\nsteps: []\n", "'name' must be text")]
     [InlineData("name: x\nsummary: 7\nsteps: []\n", "'summary' must be text")]
     [InlineData("name: x\nsteps:\n  - uses: 3\n", "'uses' of step 1 must be text")]
+    [InlineData("name: x\nstream: \"7\"\nsteps: []\n", "'stream' must be allowed, never or required")]
+    [InlineData("name: x\nstream: \"1,2\"\nsteps: []\n", "'stream' must be allowed, never or required")]
+    [InlineData("name: x\n? [a, b]\n: 1\nsteps: []\n", "A key must be text")]
     public void Mistake_IsReported(string yaml, string expected)
     {
         var result = YamlPipelineReader.Read(yaml, "f.yaml");

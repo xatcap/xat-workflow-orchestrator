@@ -10,4 +10,7 @@ internal static partial class RunnerLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The hook {Observer} failed or did not finish in time. The run goes on.")]
     public static partial void ObserverFailed(ILogger logger, Exception exception, string observer);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Run {RunId}: step {StepId} failed with code {Code}. The engine runs it again (retry {Retry}).")]
+    public static partial void StepRetried(ILogger logger, string runId, string stepId, string code, int retry);
 }

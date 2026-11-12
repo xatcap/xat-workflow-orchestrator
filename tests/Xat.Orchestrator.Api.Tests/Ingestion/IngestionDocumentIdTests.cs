@@ -41,6 +41,22 @@ public sealed class IngestionDocumentIdTests : IDisposable
         Assert.DoesNotContain(mustNotContain, sent.Url, StringComparison.Ordinal);
     }
 
+    /// <summary>The query of a delete-document request goes to xat-rag unchanged.</summary>
+    [Fact]
+    public async Task DeleteDocument_ForwardsTheQuery()
+    {
+        _rag.Given(Request.Create().WithPath("/v1/rags/docs/documents/*").UsingDelete())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody("{\"deleted\":true}"));
+        await using var factory = ApiHost.Create(settings: Settings(), kestrel: true);
+        using var client = factory.CreateClient();
+
+        using var response = await client.DeleteAsync("/v1/rags/docs/documents/a.md?force=true&x=1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var sent = Assert.Single(_rag.LogEntries).RequestMessage!;
+        Assert.EndsWith("/v1/rags/docs/documents/a.md?force=true&x=1", sent.Url, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A document ID with a dot segment, also an encoded one, is refused, because it could point to another path. Nothing goes to xat-rag.
     /// The request goes over a plain socket, because an HTTP client library removes dot segments before it sends the request.
